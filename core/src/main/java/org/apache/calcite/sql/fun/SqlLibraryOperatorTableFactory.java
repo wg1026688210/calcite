@@ -90,6 +90,9 @@ public class SqlLibraryOperatorTableFactory {
       case SPATIAL:
         list.addAll(SqlOperatorTables.spatialInstance().getOperatorList());
         break;
+      case MILVUS:
+        list.addAll(SqlOperatorTables.milvusInstance().getOperatorList());
+        break;
       default:
         custom = true;
       }

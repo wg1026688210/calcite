@@ -45,6 +45,29 @@ public class SqlOperatorTables {
     return SPATIAL.get();
   }
 
+  /** Returns the Milvus vector function operator table, if available. */
+  public static SqlOperatorTable milvusInstance() {
+    // Use reflection to load MilvusOperatorTable from the milvus module
+    try {
+      System.out.println("DEBUG: Attempting to load MilvusOperatorTable via reflection...");
+      Class<?> milvusOperatorTableClass = Class.forName(
+          "org.apache.calcite.adapter.milvus.sql.MilvusOperatorTable");
+      System.out.println("DEBUG: Found MilvusOperatorTable class: " + milvusOperatorTableClass.getName());
+
+      java.lang.reflect.Method instanceMethod =
+          milvusOperatorTableClass.getMethod("instance");
+      System.out.println("DEBUG: Found instance method: " + instanceMethod);
+
+      SqlOperatorTable result = (SqlOperatorTable) instanceMethod.invoke(null);
+      System.out.println("DEBUG: Successfully loaded MilvusOperatorTable: " + result);
+      System.out.println("DEBUG: Operators in MilvusOperatorTable: " + result.getOperatorList().size());
+      return result;
+    } catch (Exception e) {
+      // MilvusOperatorTable not available in classpath
+      return SqlOperatorTables.of(ImmutableList.of());
+    }
+  }
+
   /** Creates a composite operator table. */
   public static SqlOperatorTable chain(Iterable<SqlOperatorTable> tables) {
     final List<SqlOperatorTable> list = new ArrayList<>();

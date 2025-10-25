@@ -88,7 +88,9 @@ public enum SqlLibrary {
   SPARK("s", "spark"),
   /** A collection of operators that are in ClickHouse but not in standard
    * SQL. */
-  CLICKHOUSE("i", "clickhouse");
+  CLICKHOUSE("i", "clickhouse"),
+  /** A collection of operators that are in Milvus for vector similarity search. */
+  MILVUS("v", "milvus");
 
   /** Map from {@link Enum#name() name} and {@link #fun} to library. */
   public static final Map<String, SqlLibrary> MAP;

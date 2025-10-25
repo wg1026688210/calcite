@@ -1,0 +1,16 @@
+{
+  version: '1.0',
+  defaultSchema: 'milvus',
+  schemas: [
+    {
+      name: 'milvus',
+      type: 'custom',
+      factory: 'org.apache.calcite.adapter.milvus.factory.MilvusSchemaFactory',
+      operand: {
+        host: '${host}',
+        port: '${port}',
+        databaseName: 'default'
+      }
+    }
+  ]
+}

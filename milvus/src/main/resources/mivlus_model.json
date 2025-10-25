@@ -1,0 +1,14 @@
+{
+  "schemas": [
+    {
+      "name": "test",
+      "type": "custom",
+      "factory": "org.apache.calcite.adapter.milvus.factory",
+      "operand": {
+        "host": "${PORT}",
+        "port": "${HOST}",
+        "flavor": "TRANSLATABLE"
+      }
+    }
+  ]
+}
