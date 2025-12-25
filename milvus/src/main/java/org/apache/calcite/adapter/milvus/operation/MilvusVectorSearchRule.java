@@ -54,8 +54,7 @@ public class MilvusVectorSearchRule extends RelOptRule {
         "MilvusVectorSearchRule");
   }
 
-  @Override
-  public void onMatch(RelOptRuleCall call) {
+  @Override public void onMatch(RelOptRuleCall call) {
     final LogicalSort sort = call.rel(0);
     final LogicalProject project = call.rel(1);
     final RelNode input = project.getInput();

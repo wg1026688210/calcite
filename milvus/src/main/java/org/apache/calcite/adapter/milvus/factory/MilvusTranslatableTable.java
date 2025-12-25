@@ -60,8 +60,7 @@ public class MilvusTranslatableTable extends AbstractTable
 
   }
 
-  @Override
-  public RelNode toRel(RelOptTable.ToRelContext context, RelOptTable relOptTable) {
+  @Override public RelNode toRel(RelOptTable.ToRelContext context, RelOptTable relOptTable) {
     final RelOptCluster cluster = context.getCluster();
     return new MilvusTableScan(
         cluster,
@@ -70,8 +69,7 @@ public class MilvusTranslatableTable extends AbstractTable
         this);
   }
 
-  @Override
-  public RelDataType getRowType(RelDataTypeFactory typeFactory) {
+  @Override public RelDataType getRowType(RelDataTypeFactory typeFactory) {
 
     List<RelDataType> dataTypes = new ArrayList<>();
     List<String> fieldNames = new ArrayList<>();
@@ -134,8 +132,7 @@ public class MilvusTranslatableTable extends AbstractTable
       String filterExpression,
       List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMapForEnumerator) {
     return new AbstractEnumerable<Object>() {
-      @Override
-      public Enumerator<Object> enumerator() {
+      @Override public Enumerator<Object> enumerator() {
         return new MilvusEnumerator(
             milvusClient,
             collectionName,
@@ -154,8 +151,7 @@ public class MilvusTranslatableTable extends AbstractTable
       List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMapForEnumerator) {
 
     return new AbstractEnumerable<Object>() {
-      @Override
-      public Enumerator<Object> enumerator() {
+      @Override public Enumerator<Object> enumerator() {
         return new MilvusVectorEnumerator(
             milvusClient,
             vectorField,
@@ -169,19 +165,16 @@ public class MilvusTranslatableTable extends AbstractTable
     };
   }
 
-  @Override
-  public Expression getExpression(SchemaPlus schema, String tableName, Class clazz) {
+  @Override public Expression getExpression(SchemaPlus schema, String tableName, Class clazz) {
     return Schemas.tableExpression(schema, getElementType(), tableName, clazz);
   }
 
-  @Override
-  public <T> Queryable<T> asQueryable(QueryProvider queryProvider, SchemaPlus schema,
+  @Override public <T> Queryable<T> asQueryable(QueryProvider queryProvider, SchemaPlus schema,
       String tableName) {
     throw new UnsupportedOperationException();
   }
 
-  @Override
-  public Type getElementType() {
+  @Override public Type getElementType() {
     return Object[].class;
   }
 }

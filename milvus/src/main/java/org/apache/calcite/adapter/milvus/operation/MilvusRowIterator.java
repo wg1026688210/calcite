@@ -166,4 +166,3 @@ public  class MilvusRowIterator implements Iterator<Row> {
       return pageRows.iterator();
     }
   }
-

@@ -37,16 +37,16 @@ ORDER BY 2 LIMIT 5
 
 整体思路如下：
 保证sql功能完备：
-目前最兜底的执行路径是Enumerable算子 + MilvusToEnumerableConverter +MilvusTableScan+向量检索UDF 在内存里面进行复杂查询：
+目前最兜底的执行路径是Enumerable算子 + MilvusTableScan+向量检索UDF 在内存里面进行复杂查询：
 - Join
 - Union
-- 自查询
+- 子查询
 - 向量数据库无法检索的向量操作（如求最不相似的topn向量）
 
 查询加速：
 - Filter 下推
 现状：支持常用操作符下推， 目前不支持UDF下推 后续可能会支持一些简单的UDF，或者部分下推（应用范围待讨论，有可能会破坏后面的向量检索语义）
-原因：传给Milvus 的过滤条件是字符串表达式，复杂的UDF难以转换成字符串表达式。后面可以推动社区SDK 支持树状的谓词结构
+原因：传给Milvus 的过滤条件是字符串表达式，复杂的UDF难以转换成字符串表达式。后面可以推动社区SDK 支持树状的谓词结构支持更加细粒度的查询
 
 - Project 下推
 现状：支持project列表是常量和表字段的下推
@@ -54,7 +54,6 @@ ORDER BY 2 LIMIT 5
 - 向量检索下推 （Sort + Project）
 现状：
 - 已经实现 MilvusVectorSearchRule :当 Sort + Limit 命中 Project的向量距离函数即可转换为 MilvusVectorSearch 节点，即可将向量检索下推到 Milvus 端执行（求最相似的top n向量）
-
 为保证查询正确性，规则会验证排序方向：
 
 ```java
@@ -167,10 +166,3 @@ milvus/
         └── sql/
             └── MilvusVectorSearchTest.java   # 集成测试
 ```
-
-
-
-
-
-
-
