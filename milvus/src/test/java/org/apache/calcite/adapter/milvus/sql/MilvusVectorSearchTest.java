@@ -31,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -186,6 +187,51 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
           expected,
           checkSqlResult(sql, connection, 2));
 
+    }
+  }
+
+  @Test public void testComplexQuery() throws SQLException {
+
+    {
+      String sql =
+          "SELECT B.book_name ,A.book_name, l2_distance(A.VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') AS distance FROM milvus.test_vector_search A join milvus.test_vector_search B on A.book_name= B.book_name \n"
+  +
+              "WHERE  CHAR_LENGTH(A.book_name) < 9999 ORDER BY 3 LIMIT 5";
+      String executionPlan = getExecutionPlan(sql, connection);
+      checkSqlResult(sql, connection, 2);
+      System.out.println(executionPlan);
+      List<String> actual = checkSqlResult(sql, connection);
+      List<String> expected =
+          Lists.newArrayList("小王子,小王子,0.0",
+          "时间简史,时间简史,0.5477225697477194",
+          "百年孤独,百年孤独,1.0954451966273537",
+          "活着,活着,1.6431677378091152",
+          "围城,围城,2.1908902789908775");
+      assertEquals(expected, actual);
+    }
+
+    {
+      // test aggregation and union with vector search
+      String sql =
+          "SELECT '近距离' as range_type, COUNT(*) as book_count FROM milvus.test_vector_search WHERE l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') < 1\n"
+  +
+              "UNION ALL\n"
+  +
+              "SELECT '中距离' as range_type, COUNT(*) as book_count FROM milvus.test_vector_search WHERE l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') >= 1 AND l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') < 2\n"
+  +
+              "UNION ALL\n"
+  +
+              "SELECT '远距离' as range_type, COUNT(*) as book_count FROM milvus.test_vector_search WHERE l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') >= 2";
+
+      String executionPlan = getExecutionPlan(sql, connection);
+      System.out.println(executionPlan);
+      List<String> actual = checkSqlResult(sql, connection);
+
+      List<String> expected =
+          Lists.newArrayList("近距离,2",
+          "中距离,2",
+          "远距离,6");
+      assertEquals(expected, actual);
     }
   }
 

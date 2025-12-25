@@ -55,7 +55,7 @@ public class MilvusProject extends Project implements MilvusRel {
   @Override public @Nullable RelOptCost computeSelfCost(RelOptPlanner planner,
       RelMetadataQuery mq) {
     final RelOptCost cost = requireNonNull(super.computeSelfCost(planner, mq));
-    return cost.multiplyBy(0.01);  
+    return cost.multiplyBy(0.01);
   }
 
   @Override public void implement(Implementor implementor) {

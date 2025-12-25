@@ -30,8 +30,6 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 
 import com.google.common.collect.ImmutableList;
 
-import org.apache.calcite.rel.type.RelDataType;
-
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.List;

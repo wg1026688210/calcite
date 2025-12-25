@@ -68,8 +68,7 @@ public class MilvusSchema extends AbstractSchema {
     return describeCollectionResp.getCollectionSchema();
   }
 
-  @Override
-  protected Map<String, Table> getTableMap() {
+  @Override protected Map<String, Table> getTableMap() {
     return tableMap;
   }
 }
