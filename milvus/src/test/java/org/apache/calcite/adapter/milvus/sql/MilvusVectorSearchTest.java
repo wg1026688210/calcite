@@ -235,6 +235,88 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
     }
   }
 
+  @Test void testVectorSearchWithTableHint() throws Exception {
+    String queryVector = "[0.1, 0.2, 0.3, 0.4]";
+
+    {
+      // Test hint with nprobe parameter after table name (IVFFLAT only)
+      String sql =
+          String.format(
+              "SELECT book_name, l2_distance(%s, '%s') AS d\n"
+                  + "FROM milvus.%s /*+ VECTOR_SEARCH(nprobe=32) */\n"
+                  + "ORDER BY d\n"
+                  + "LIMIT 5",
+              CommonData.defaultVectorField,
+              queryVector,
+              FLOAT_VECTOR_COLLECTION_NAME);
+
+      String executionPlan = getExecutionPlan(sql, connection);
+      assertTrue(containsMilvusOperator(executionPlan, MILVUS_VECTOR_SEARCH));
+
+      List<String> results = checkSqlResult(sql, connection, 2);
+      assertFalse(results.isEmpty(), "Query with hint should return results");
+      assertEquals(5, results.size(), "Should return exactly 5 results");
+      assertTrue(results.get(0).startsWith("小王子,0"), "First result should be 小王子");
+    }
+
+    {
+      // Test default nprobe value
+      String sql =
+          String.format(
+              "SELECT book_name, l2_distance(%s, '%s') AS d\n"
+                  + "FROM milvus.%s /*+ VECTOR_SEARCH() */\n"
+                  + "WHERE book_name <> '小王子'\n"
+                  + "ORDER BY d\n"
+                  + "LIMIT 3",
+              CommonData.defaultVectorField,
+              queryVector,
+              FLOAT_VECTOR_COLLECTION_NAME);
+
+      List<String> results = checkSqlResult(sql, connection, 2);
+      assertEquals(3, results.size(), "Should return exactly 3 results with filter");
+      assertFalse(results.get(0).contains("小王子"), "Filtered results should not include 小王子");
+    }
+
+    {
+      // Test hint with different nprobe values
+      String sql =
+          String.format(
+              "SELECT book_name, l2_distance(%s, '%s') AS d\n"
+                  + "FROM milvus.%s /*+ VECTOR_SEARCH(nprobe=64) */\n"
+                  + "ORDER BY d\n"
+                  + "LIMIT 2",
+              CommonData.defaultVectorField,
+              queryVector,
+              FLOAT_VECTOR_COLLECTION_NAME);
+
+      List<String> results = checkSqlResult(sql, connection, 2);
+      assertEquals(2, results.size(), "Should return exactly 2 results");
+      assertTrue(results.get(0).startsWith("小王子"), "First result should be 小王子");
+    }
+  }
+
+  @Test void testVectorSearchWithCosineHint() throws Exception {
+    String queryVector = "[0.1, 0.2, 0.3, 0.4]";
+
+    // Test hint with cosine distance function (IVFFLAT support)
+    String sql =
+        String.format(
+            "SELECT book_name, cosine_distance(%s, '%s') AS similarity\n"
+                + "FROM milvus.%s /*+ VECTOR_SEARCH(nprobe=32) */\n"
+                + "ORDER BY similarity DESC\n"
+                + "LIMIT 5",
+            CommonData.defaultVectorField,
+            queryVector,
+            FLOAT_VECTOR_COLLECTION_NAME);
+
+    String executionPlan = getExecutionPlan(sql, connection);
+    assertTrue(containsMilvusOperator(executionPlan, MILVUS_VECTOR_SEARCH));
+
+    List<String> results = checkSqlResult(sql, connection, 2);
+    assertEquals(5, results.size());
+  }
+
+
   @AfterEach
   public void tearDown() throws Exception {
     if (connection != null && !connection.isClosed()) {

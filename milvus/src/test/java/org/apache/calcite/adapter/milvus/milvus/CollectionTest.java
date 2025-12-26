@@ -26,6 +26,7 @@ import io.milvus.v2.service.collection.request.CreateCollectionReq;
 import io.milvus.v2.service.collection.request.DescribeCollectionReq;
 import io.milvus.v2.service.collection.response.DescribeCollectionResp;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,12 +68,7 @@ public class CollectionTest extends MilvusBaseE2ETest {
                 .collectionName(COLLECTION)
                 .build());
 
-    for (CreateCollectionReq.FieldSchema fieldSchema : describeCollectionResp.getCollectionSchema()
-        .getFieldSchemaList()) {
-      String name = fieldSchema.getName();
-      DataType dataType = fieldSchema.getDataType();
-      System.out.println(name + " : " + dataType);
-    }
+    Assertions.assertEquals(3,describeCollectionResp.getCollectionSchema().getFieldSchemaList().size());
   }
 
 }

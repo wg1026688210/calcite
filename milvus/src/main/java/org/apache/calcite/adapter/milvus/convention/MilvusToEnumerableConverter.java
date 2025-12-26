@@ -24,6 +24,7 @@ import org.apache.calcite.adapter.enumerable.PhysTypeImpl;
 import org.apache.calcite.adapter.milvus.factory.MilvusTranslatableTable;
 import org.apache.calcite.adapter.milvus.operation.MilvusFilterTranslator;
 import org.apache.calcite.adapter.milvus.operation.MilvusProjectExpression;
+import org.apache.calcite.adapter.milvus.util.VectorLogicExtractor;
 import org.apache.calcite.linq4j.tree.BlockBuilder;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.Expressions;
@@ -53,9 +54,6 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.apache.calcite.adapter.milvus.util.VectorLogicExtractor.extractMetricType;
-import static org.apache.calcite.adapter.milvus.util.VectorLogicExtractor.extractVectorField;
-import static org.apache.calcite.adapter.milvus.util.VectorLogicExtractor.extractVectorValue;
 
 /**
  * MilvusToEnumerableConverter converts a relational expression
@@ -132,9 +130,9 @@ public class MilvusToEnumerableConverter
                   projectInfoExpr));
     } else {
       // with vector search
-      Expression vectorField = extractVectorField(milvusImplementor.vectorDistanceExpr, getInput());
-      Expression vectorValueExpr = extractVectorValue(milvusImplementor.vectorDistanceExpr);
-      Expression metricType = Expressions.constant(extractMetricType(milvusImplementor.vectorDistanceExpr));
+      Expression vectorField = VectorLogicExtractor.extractVectorField(milvusImplementor.vectorDistanceExpr, getInput());
+      Expression vectorValueExpr = VectorLogicExtractor.extractVectorValue(milvusImplementor.vectorDistanceExpr);
+      Expression metricType = Expressions.constant(VectorLogicExtractor.extractMetricType(milvusImplementor.vectorDistanceExpr));
 
       enumerable =
           list.append(

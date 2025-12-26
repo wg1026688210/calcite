@@ -28,9 +28,35 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.util.BuiltInMethod;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 public class VectorLogicExtractor {
+
+  private static final String ARRAY_OPERATOR_NAME = "ARRAY";
+
+  // Supported vector distance functions
+  private static final String L2_DISTANCE = "L2_DISTANCE";
+  private static final String COSINE_DISTANCE = "COSINE_DISTANCE";
+  private static final String INNER_PRODUCT = "INNER_PRODUCT";
+
+  private static final Set<String> SUPPORTED_DISTANCE_FUNCTIONS = Set.of(
+      L2_DISTANCE,
+      COSINE_DISTANCE,
+      INNER_PRODUCT
+  );
+
+  // Mapping from function name to Milvus metric type
+  private static final Map<String, String> METRIC_TYPE_MAP = new HashMap<>();
+
+  static {
+    METRIC_TYPE_MAP.put(L2_DISTANCE, "L2");
+    METRIC_TYPE_MAP.put(COSINE_DISTANCE, "COSINE");
+    METRIC_TYPE_MAP.put(INNER_PRODUCT, "IP");
+  }
 
   public static Expression extractVectorField(RexNode vectorDistanceExpr, RelNode input) {
     if (vectorDistanceExpr instanceof RexCall) {
@@ -47,7 +73,7 @@ public class VectorLogicExtractor {
             return Expressions.constant(cursor.getRowType().getFieldNames().get(fieldIndex));
           }
 
-          if (cursor.getInputs() == null || cursor.getInputs().isEmpty()) {
+          if (cursor.getInputs().isEmpty()) {
             break;
           }
 
@@ -63,84 +89,151 @@ public class VectorLogicExtractor {
    * Extract the query vector value from the distance expression and build Expression.
    */
   public static Expression extractVectorValue(RexNode vectorDistanceExpr) {
-    if (vectorDistanceExpr instanceof RexCall) {
-      RexCall call = (RexCall) vectorDistanceExpr;
-      RexNode vectorLiteral = call.operands.get(1);
+    if (!(vectorDistanceExpr instanceof RexCall)) {
+      throw new RuntimeException("Vector distance expression must be a function call");
+    }
 
-      if (vectorLiteral instanceof RexCall &&
-          ((RexCall) vectorLiteral).getOperator().getName().equalsIgnoreCase("ARRAY")) {
-        RexCall arrayCall = (RexCall) vectorLiteral;
-        List<Expression> vectorElements = new ArrayList<>();
-        for (RexNode element : arrayCall.operands) {
-          if (element instanceof RexLiteral) {
-            Object value = ((RexLiteral) element).getValue();
-            float floatValue = value instanceof Number ? ((Number) value).floatValue() :
-                             Float.parseFloat(value.toString());
-            vectorElements.add(Expressions.constant(floatValue, float.class));
-          }
-        }
-        return Expressions.call(BuiltInMethod.ARRAYS_AS_LIST.method,
-            Expressions.newArrayInit(Float.class, vectorElements));
+    RexCall call = (RexCall) vectorDistanceExpr;
+    if (call.operands.size() < 2) {
+      throw new RuntimeException("Distance function requires at least 2 parameters");
+    }
+
+    RexNode vectorLiteral = call.operands.get(1);
+
+    // Handle ARRAY() constructor: ARRAY[1.0, 2.0, 3.0]
+    if (vectorLiteral instanceof RexCall) {
+      RexCall arrayCall = (RexCall) vectorLiteral;
+      if (ARRAY_OPERATOR_NAME.equalsIgnoreCase(arrayCall.getOperator().getName())) {
+        List<Float> vectorValues = extractFloatValuesFromArrayCall(arrayCall);
+        return buildVectorExpression(vectorValues);
       }
+      throw new RuntimeException(
+          "Unsupported vector expression type: " + arrayCall.getOperator().getName());
+    }
 
-      if (vectorLiteral instanceof RexLiteral) {
-        String value = ((RexLiteral) vectorLiteral).getValueAs(String.class);
+    // Handle string literal: '[1.0, 2.0, 3.0]' or '1.0, 2.0, 3.0'
+    if (vectorLiteral instanceof RexLiteral) {
+      List<Float> vectorValues = extractFloatValuesFromLiteral((RexLiteral) vectorLiteral);
+      return buildVectorExpression(vectorValues);
+    }
 
-        if (value != null) {
-          value = value.trim();
-        }
+    throw new RuntimeException(
+        "Unsupported vector literal type: " + vectorLiteral.getClass().getSimpleName());
+  }
 
-        if (value.startsWith("[") && value.endsWith("]")) {
-          value = value.substring(1, value.length() - 1);
-        }
+  /**
+   * Extract float values from ARRAY() RexCall.
+   */
+  private static List<Float> extractFloatValuesFromArrayCall(RexCall arrayCall) {
+    List<Float> values = new ArrayList<>();
+    for (RexNode element : arrayCall.operands) {
+      if (!(element instanceof RexLiteral)) {
+        throw new RuntimeException("Array elements must be literals, got: "
+            + element.getClass().getSimpleName());
+      }
+      values.add(extractFloatFromLiteral((RexLiteral) element));
+    }
+    return values;
+  }
 
-        String[] parts = value.split(",");
-        List<Expression> vectorElements = new ArrayList<>();
-        for (String part : parts) {
-          float floatValue = Float.parseFloat(part.trim());
-          vectorElements.add(Expressions.constant(floatValue, float.class));
-        }
-        return Expressions.call(BuiltInMethod.ARRAYS_AS_LIST.method,
-            Expressions.newArrayInit(Float.class, vectorElements));
+  /**
+   * Extract float values from string literal.
+   */
+  private static List<Float> extractFloatValuesFromLiteral(RexLiteral literal) {
+    String value = Objects.requireNonNull(literal.getValueAs(String.class),
+        "Vector string literal cannot be null");
+
+    String trimmedValue = value.trim();
+
+    // Handle '[1.0, 2.0, 3.0]' format
+    if (trimmedValue.startsWith("[") && trimmedValue.endsWith("]")) {
+      trimmedValue = trimmedValue.substring(1, trimmedValue.length() - 1);
+    }
+
+    // Handle '1.0, 2.0, 3.0' format
+    String[] parts = trimmedValue.split(",");
+    if (parts.length == 0) {
+      throw new RuntimeException("Vector string literal is empty");
+    }
+
+    List<Float> values = new ArrayList<>();
+    for (String part : parts) {
+      try {
+        values.add(Float.parseFloat(part.trim()));
+      } catch (NumberFormatException e) {
+        throw new RuntimeException("Invalid float value in vector literal: " + part.trim(), e);
       }
     }
-    throw new RuntimeException("Invalid vector literal in distance expression");
+    return values;
+  }
+
+  /**
+   * Extract float from RexLiteral.
+   */
+  private static float extractFloatFromLiteral(RexLiteral literal) {
+    Object value = literal.getValue();
+    if (value instanceof Number) {
+      return ((Number) value).floatValue();
+    }
+    if (value == null) {
+      throw new RuntimeException("Cannot convert null literal to float");
+    }
+    try {
+      return Float.parseFloat(value.toString());
+    } catch (NumberFormatException e) {
+      throw new RuntimeException("Cannot convert literal to float: " + value, e);
+    }
+  }
+
+  /**
+   * Build vector expression from float values.
+   */
+  private static Expression buildVectorExpression(List<Float> values) {
+    if (values.isEmpty()) {
+      throw new RuntimeException("Vector cannot be empty");
+    }
+
+    List<Expression> vectorElements = new ArrayList<>();
+    for (Float value : values) {
+      vectorElements.add(Expressions.constant(value, float.class));
+    }
+
+    return Expressions.call(BuiltInMethod.ARRAYS_AS_LIST.method,
+        Expressions.newArrayInit(Float.class, vectorElements));
   }
 
   /**
    * Extract the metric type from the distance expression.
    */
   public static String extractMetricType(RexNode vectorDistanceExpr) {
-    if (vectorDistanceExpr instanceof RexCall) {
-      RexCall call = (RexCall) vectorDistanceExpr;
-      String opName = call.getOperator().getName().toUpperCase();
+    String opName = getFunctionName(vectorDistanceExpr);
+    String metricType = METRIC_TYPE_MAP.get(opName);
 
-      switch (opName) {
-      case "L2_DISTANCE":
-        return "L2";
-      case "COSINE_DISTANCE":
-        return "COSINE";
-      case "INNER_PRODUCT":
-        return "IP";
-      default:
-        throw new RuntimeException("Unsupported distance metric: " + opName);
-      }
+    if (metricType != null) {
+      return metricType;
     }
-    throw new RuntimeException("Invalid distance expression");
+
+    throw new RuntimeException("Unsupported distance metric: " + opName);
   }
 
+  /**
+   * Check if the expression is a supported vector distance function.
+   */
   public static boolean isVectorDistanceFunction(RexNode expr) {
+    String opName = getFunctionName(expr);
+    return opName != null && SUPPORTED_DISTANCE_FUNCTIONS.contains(opName);
+  }
+
+  /**
+   * Extract the normalized function name from a RexNode.
+   * Returns null if the expression is not a function call.
+   */
+  private static String getFunctionName(RexNode expr) {
     if (expr instanceof RexCall) {
       RexCall call = (RexCall) expr;
-      SqlOperator operator = call.getOperator();
-      String opName = operator.getName().toUpperCase();
-
-      // Check if it's a supported distance function
-      return opName.equals("L2_DISTANCE")
-          || opName.equals("COSINE_DISTANCE")
-          || opName.equals("INNER_PRODUCT");
+      return call.getOperator().getName().toUpperCase();
     }
-    return false;
+    return null;
   }
 
 }
