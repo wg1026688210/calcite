@@ -27,6 +27,7 @@ import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Relational expression that uses Milvus calling convention.
@@ -42,6 +43,7 @@ public interface MilvusRel extends RelNode {
     public RelOptTable table;
     public MilvusTranslatableTable milvusTable;
     public RelDataType rowType;
+    public Map<String,String> milvusOptions;
     // filter
     public RexNode filterCondition;
     // project

@@ -53,7 +53,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
-
+import java.util.Map;
 
 /**
  * MilvusToEnumerableConverter converts a relational expression
@@ -94,7 +94,10 @@ public class MilvusToEnumerableConverter
     final Expression table = getScanInfo(qualifiedTableName, schema);
     final Expression tableExpr =
         Expressions.convert_(table, MilvusTranslatableTable.class);
-
+    Map<String, String> milvusOptions = milvusImplementor.milvusOptions;
+    // expose milvusOptions as an expression so it can be passed to the runtime vectorSearch call
+    final Expression milvusOptionsExpr =
+        list.append("milvusOptions", Expressions.constant(milvusOptions, Map.class));
     //project
     final RelDataType rowType = milvusImplementor.projectRowType != null
         ? milvusImplementor.projectRowType
@@ -143,7 +146,8 @@ public class MilvusToEnumerableConverter
                   metricType,
                   Expressions.box(Expressions.constant(getTopK(milvusImplementor.limit)), Primitive.LONG),
                   filterExpr,
-                  projectInfoExpr));
+                  projectInfoExpr,
+                  milvusOptionsExpr));
     }
 
     list.add(Expressions.return_(null, enumerable));

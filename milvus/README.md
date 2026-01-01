@@ -99,7 +99,6 @@ COSINE_DISTANCE → DESC
 将 Milvus RelNode 转换为 Enumerable（可枚举）形式，生成执行代码：
 - 构建运行时向量搜索参数
 - 生成 `table.vectorSearch()`，`table.scan()` 方法调用
-- 处理结果投影
 
 ## 使用示例
 

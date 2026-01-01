@@ -27,7 +27,7 @@ import java.util.Map;
 
 /**
  * Utility class for common projection operations shared between
- * MilvusEnumerator and MilvusVectorEnumerator.
+ * MilvusQueryEnumerator and MilvusSearchEnumerator.
  * Provides shared implementations for field value extraction and conversion.
  */
 public final class MilvusProjectUtil {

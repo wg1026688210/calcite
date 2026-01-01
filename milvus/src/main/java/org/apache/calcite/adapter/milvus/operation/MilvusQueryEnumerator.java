@@ -29,12 +29,12 @@ import java.util.List;
 /**
  * Enumerator that reads from a Milvus collection with pagination support.
  */
-public class MilvusEnumerator implements Enumerator<Object> {
+public class MilvusQueryEnumerator implements Enumerator<Object> {
   private static final int DEFAULT_PAGINATION_SIZE = 1;
   private final Iterator<Row> iterator;
   private Object current;
 
-  public MilvusEnumerator(
+  public MilvusQueryEnumerator(
       MilvusClientV2 client,
       String collectionName,
       @Nullable String filterExpression,

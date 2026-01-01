@@ -18,7 +18,9 @@ package org.apache.calcite.adapter.milvus;
 
 import org.apache.calcite.adapter.milvus.extension.MilvusExtension;
 import org.apache.calcite.adapter.milvus.factory.MilvusSchemaFactory;
+import org.apache.calcite.adapter.milvus.hint.MilvusPrepareImpl;
 import org.apache.calcite.jdbc.CalciteConnection;
+import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaPlus;
 
@@ -27,16 +29,10 @@ import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 /**
  * Base class for Milvus E2E tests providing utility methods and constants.
@@ -61,22 +57,12 @@ public class MilvusBaseE2ETest {
       MILVUS_VECTOR_SEARCH.toLowerCase()
   };
 
-  /**
-   * Get the Milvus service client from the extension.
-   * Tests must use @ExtendWith(MilvusExtension.class)
-   *
-   * @return MilvusServiceClient instance
-   */
+
   public static MilvusServiceClient getMilvusServiceClientV1() {
     return MilvusExtension.getMilvusClientV1();
   }
 
-  /**
-   * Get the Milvus V2 client.
-   * Tests must use @ExtendWith(MilvusExtension.class)
-   *
-   * @return MilvusClientV2 instance
-   */
+
   public static MilvusClientV2 getMilvusServiceClientV2() {
     Map<String, Object> params = MilvusExtension.getConnectionParams();
     String host = (String) params.get("host");
@@ -88,20 +74,6 @@ public class MilvusBaseE2ETest {
     return new MilvusClientV2(connectConfig);
   }
 
-
-  protected boolean checkAllMilvusOperators(String executionPlan) {
-    return Arrays.stream(executionPlan.split("\n")).allMatch(this::checkMilvusOperator);
-  }
-
-  private boolean checkMilvusOperator(String plan) {
-    String planLower = plan.toLowerCase();
-    for (String pattern : MILVUS_OPERATOR_PATTERNS) {
-      if (planLower.contains(pattern)) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   /**
    * Check if the execution plan contains a specific Milvus operator.
@@ -144,6 +116,10 @@ public class MilvusBaseE2ETest {
 
   /**
    * Set up a Calcite connection with Milvus schema.
+   * <p>
+   * Note: This connection is configured with MILVUS_OPTIONS hint support.
+   * We use this method to register hint strategies so that
+   * context.getTableHints() can return hints.
    *
    * @return Connection to Calcite with Milvus schema
    * @throws Exception if setup fails
@@ -157,13 +133,18 @@ public class MilvusBaseE2ETest {
     String host = (String) params.get("host");
     Integer port = (Integer) params.get("port");
 
-    Properties info = new Properties();
-    info.setProperty("lex", "JAVA");
-    info.setProperty("fun", "milvus");
     System.setProperty("calcite.default.charset", "UTF-8");
     System.setProperty("calcite.default.nationalcharset", "UTF-8");
     System.setProperty("file.encoding", "UTF-8");
-    Connection connection = DriverManager.getConnection("jdbc:calcite:", info);
+
+    // Create connection config with hint support
+    Properties info = new Properties();
+    info.setProperty("lex", "JAVA");
+    info.setProperty("fun", "milvus");
+
+    // Enable Milvus hint strategies in the JDBC execution path.
+    final Driver driver = new Driver().withPrepareFactory(MilvusPrepareImpl::new);
+    Connection connection = driver.connect("jdbc:calcite:", info);
     CalciteConnection calciteConnection = connection.unwrap(CalciteConnection.class);
     SchemaPlus rootSchema = calciteConnection.getRootSchema();
 
@@ -177,6 +158,8 @@ public class MilvusBaseE2ETest {
     Schema milvusSchema = schemaFactory.create(rootSchema, "milvus", operands);
     // Add to root
     rootSchema.add("milvus", milvusSchema);
+
+    System.out.println("[setupCalciteConnection] Milvus hint strategies enabled for JDBC execution");
     return connection;
   }
 

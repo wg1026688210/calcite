@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
  * 3. Can be executed when vector search is not push down to milvus
  *
  * <p>The actual vector similarity search can be performed by either local computation or
- * by {@link org.apache.calcite.adapter.milvus.operation.MilvusVectorEnumerator}
+ * by {@link org.apache.calcite.adapter.milvus.operation.MilvusSearchEnumerator}
  * using Milvus's native search capabilities.
  */
 public class MilvusVectorUdfs {
@@ -67,7 +67,7 @@ public class MilvusVectorUdfs {
       try {
         String numStr = part.trim();
 
-        result.add(Float.parseFloat(numStr));
+        result.add(parseFloat(numStr));
       } catch (NumberFormatException e) {
         throw new IllegalArgumentException(
             "Invalid query vector format. Expected a JSON array of floats, e.g., \"[0.1, 0.2, 0.3]\"",

@@ -24,15 +24,11 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.util.BuiltInMethod;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import com.google.common.collect.Sets;
+
+import java.util.*;
 
 public class VectorLogicExtractor {
 
@@ -43,11 +39,10 @@ public class VectorLogicExtractor {
   private static final String COSINE_DISTANCE = "COSINE_DISTANCE";
   private static final String INNER_PRODUCT = "INNER_PRODUCT";
 
-  private static final Set<String> SUPPORTED_DISTANCE_FUNCTIONS = Set.of(
-      L2_DISTANCE,
+  private static final Set<String> SUPPORTED_DISTANCE_FUNCTIONS =
+      Sets.newHashSet(L2_DISTANCE,
       COSINE_DISTANCE,
-      INNER_PRODUCT
-  );
+      INNER_PRODUCT);
 
   // Mapping from function name to Milvus metric type
   private static final Map<String, String> METRIC_TYPE_MAP = new HashMap<>();
@@ -140,8 +135,8 @@ public class VectorLogicExtractor {
    * Extract float values from string literal.
    */
   private static List<Float> extractFloatValuesFromLiteral(RexLiteral literal) {
-    String value = Objects.requireNonNull(literal.getValueAs(String.class),
-        "Vector string literal cannot be null");
+    String value =
+        Objects.requireNonNull(literal.getValueAs(String.class), "Vector string literal cannot be null");
 
     String trimmedValue = value.trim();
 

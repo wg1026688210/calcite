@@ -16,10 +16,10 @@
  */
 package org.apache.calcite.adapter.milvus.factory;
 
-import org.apache.calcite.adapter.milvus.operation.MilvusEnumerator;
 import org.apache.calcite.adapter.milvus.operation.MilvusProjectExpression;
+import org.apache.calcite.adapter.milvus.operation.MilvusQueryEnumerator;
+import org.apache.calcite.adapter.milvus.operation.MilvusSearchEnumerator;
 import org.apache.calcite.adapter.milvus.operation.MilvusTableScan;
-import org.apache.calcite.adapter.milvus.operation.MilvusVectorEnumerator;
 import org.apache.calcite.linq4j.AbstractEnumerable;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Enumerator;
@@ -46,6 +46,7 @@ import io.milvus.v2.service.collection.request.CreateCollectionReq;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class MilvusTranslatableTable extends AbstractTable
     implements QueryableTable, TranslatableTable {
@@ -65,6 +66,7 @@ public class MilvusTranslatableTable extends AbstractTable
     return new MilvusTableScan(
         cluster,
         cluster.traitSetOf(org.apache.calcite.adapter.milvus.convention.MilvusRel.CONVENTION),
+        context.getTableHints(),
         relOptTable,
         this);
   }
@@ -133,7 +135,7 @@ public class MilvusTranslatableTable extends AbstractTable
       List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMapForEnumerator) {
     return new AbstractEnumerable<Object>() {
       @Override public Enumerator<Object> enumerator() {
-        return new MilvusEnumerator(
+        return new MilvusQueryEnumerator(
             milvusClient,
             collectionName,
             filterExpression,
@@ -148,11 +150,12 @@ public class MilvusTranslatableTable extends AbstractTable
       String metricType,
       Long topK,
       String filterExpression,
-      List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMapForEnumerator) {
+      List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMapForEnumerator,
+      Map<String,String> milvusOptions) {
 
     return new AbstractEnumerable<Object>() {
       @Override public Enumerator<Object> enumerator() {
-        return new MilvusVectorEnumerator(
+        return new MilvusSearchEnumerator(
             milvusClient,
             vectorField,
             queryVector,
@@ -160,7 +163,8 @@ public class MilvusTranslatableTable extends AbstractTable
             topK,
             filterExpression,
             collectionName,
-            projectRowTypeMapForEnumerator);
+            projectRowTypeMapForEnumerator,
+            milvusOptions);
       }
     };
   }

@@ -19,20 +19,23 @@ package org.apache.calcite.adapter.milvus.operation;
 import org.apache.calcite.adapter.milvus.convention.MilvusRel;
 import org.apache.calcite.adapter.milvus.convention.MilvusToEnumerableConverterRule;
 import org.apache.calcite.adapter.milvus.factory.MilvusTranslatableTable;
+import org.apache.calcite.adapter.milvus.hint.MilvusHintConfig;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
-
-import com.google.common.collect.ImmutableList;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
@@ -47,24 +50,27 @@ import static java.util.Objects.requireNonNull;
 public class MilvusTableScan extends TableScan implements MilvusRel {
   final MilvusTranslatableTable milvusTable;
 
-  /**
-   * Creates a MilvusTableScan.
-   *
-   * @param cluster        Cluster
-   * @param traitSet       Traits
-   * @param table          Table
-   * @param milvusTable    Milvus table
-   */
   public MilvusTableScan(RelOptCluster cluster, RelTraitSet traitSet,
+      List<RelHint> hints,
       RelOptTable table, MilvusTranslatableTable milvusTable) {
-    super(cluster, traitSet, ImmutableList.of(), table);
+    super(cluster, traitSet, hints, table);
+
     this.milvusTable = requireNonNull(milvusTable, "milvusTable");
     checkArgument(getConvention() == MilvusRel.CONVENTION);
   }
 
+  @Override public RelNode withHints(List<RelHint> hintList) {
+    return new MilvusTableScan(getCluster(), traitSet, hintList, table, milvusTable);
+  }
+
   @Override public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
     assert inputs.isEmpty();
-    return this;
+    return new MilvusTableScan(getCluster(), traitSet, getHints(), table, milvusTable);
+  }
+
+  @Override public RelWriter explainTerms(RelWriter pw) {
+    return super.explainTerms(pw)
+        .itemIf("hints", getHints(), !getHints().isEmpty());
   }
 
   @Override public @Nullable RelOptCost computeSelfCost(RelOptPlanner planner,
@@ -85,16 +91,14 @@ public class MilvusTableScan extends TableScan implements MilvusRel {
     implementor.table = table;
     implementor.milvusTable = milvusTable;
     implementor.rowType = getRowType();
-  }
 
-  /**
-   * Gets the field names from the scan's row type.
-   * This is used by MilvusFilter for translating filter expressions.
-   *
-   * @return list of field names
-   */
-  public List<String> getFieldNames() {
-    return getRowType().getFieldNames();
+    Map<String ,String> milvusOptions = new HashMap<>();
+    for (RelHint hint : getHints()) {
+      if (MilvusHintConfig.MILVUS_OPTIONS.equals(hint.hintName)){
+        milvusOptions.putAll(hint.kvOptions);
+      }
+    }
+    implementor.milvusOptions = milvusOptions;
   }
 
 }

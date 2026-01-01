@@ -40,10 +40,17 @@ import java.util.List;
 public class TestEnvUtil {
   private String  collectionName;
   private  MilvusServiceClient milvusServiceClient;
+  private final MetricType metricType;
 
   public TestEnvUtil(String collectionName, MilvusServiceClient milvusServiceClient) {
+    this(collectionName, milvusServiceClient, MetricType.L2);
+  }
+
+  public TestEnvUtil(String collectionName, MilvusServiceClient milvusServiceClient,
+      MetricType metricType) {
     this.collectionName = collectionName;
     this.milvusServiceClient = milvusServiceClient;
+    this.metricType = metricType;
   }
 
   public void createExampleCollection() {
@@ -98,13 +105,12 @@ public class TestEnvUtil {
       throw new RuntimeException("Failed to insert data: " + response.getMessage());
     }
 
-    // Create IVF_FLAT index for float vector field with L2 metric
     CreateIndexParam indexParam = CreateIndexParam.newBuilder()
         .withCollectionName(collectionName)
         .withFieldName(CommonData.defaultVectorField)
         .withIndexName("float_vector_idx")
         .withIndexType(IndexType.IVF_FLAT)
-        .withMetricType(MetricType.L2)
+        .withMetricType(metricType)
         .withExtraParam("{\"nlist\":1024}")
         .withSyncMode(Boolean.TRUE)
         .build();

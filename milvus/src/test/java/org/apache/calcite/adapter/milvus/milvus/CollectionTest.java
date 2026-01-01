@@ -21,8 +21,6 @@ import org.apache.calcite.adapter.milvus.extension.MilvusExtension;
 import org.apache.calcite.adapter.milvus.util.MilvusTestUtil;
 
 import io.milvus.v2.client.MilvusClientV2;
-import io.milvus.v2.common.DataType;
-import io.milvus.v2.service.collection.request.CreateCollectionReq;
 import io.milvus.v2.service.collection.request.DescribeCollectionReq;
 import io.milvus.v2.service.collection.response.DescribeCollectionResp;
 

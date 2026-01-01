@@ -27,22 +27,17 @@ import io.milvus.v2.service.vector.response.SearchResp;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Enumerator that performs vector similarity search in Milvus.
  * Handles both vector-only queries and vector+scalar filter queries.
  */
-public class MilvusVectorEnumerator implements Enumerator<Object> {
+public class MilvusSearchEnumerator implements Enumerator<Object> {
   private final Iterator<Row> iterator;
   private Object current;
 
-  public MilvusVectorEnumerator(
+  public MilvusSearchEnumerator(
       MilvusClientV2 client,
       String vectorField,
       List<Float> queryVector,
@@ -50,7 +45,8 @@ public class MilvusVectorEnumerator implements Enumerator<Object> {
       Long topK,
       @Nullable String filterExpression,
       String collectionName,
-      List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMap) {
+      List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMap,
+      @Nullable Map<String, String> milvusOptions) {
 
     List<String> outputFields = getOutputFields(projectRowTypeMap);
 
@@ -62,6 +58,7 @@ public class MilvusVectorEnumerator implements Enumerator<Object> {
         .topK(topK)
         .filterExpression(filterExpression)
         .outputFields(outputFields)
+        .milvusOptions(milvusOptions)
         .build();
 
     this.iterator = createIterator(client, param, projectRowTypeMap);
@@ -87,50 +84,25 @@ public class MilvusVectorEnumerator implements Enumerator<Object> {
       MilvusClientV2 client,
       VectorSearchParam param,
       List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMapForEnumerator) {
-
-
-    // hint
-    VectorSearchHint searchHint = param.getSearchHint();
-    Map<String, Object> searchParams = new HashMap<>();
-    if (searchHint != null) {
-      Map<String, String> stringParams = searchHint.getIndexParams();
-      searchParams.putAll(stringParams);
-    }
-
-    List<Float> vector = param.getQueryVector();
-
-    // Build search request - conditionally add filter
-    SearchReq searchReq;
-    if (param.getFilterExpression() != null && !param.getFilterExpression().isEmpty()) {
-      searchReq = SearchReq.builder()
-          .collectionName(param.getCollectionName())
-          .data(Collections.singletonList(new FloatVec(vector)))
-          .topK(param.getTopK().intValue())
-          .outputFields(param.getOutputFields())
-          .searchParams(searchParams)
-          .metricType(IndexParam.MetricType.valueOf(param.getMetricType()))
-          .filter(param.getFilterExpression())
-          .build();
-    } else {
-      searchReq = SearchReq.builder()
-          .collectionName(param.getCollectionName())
-          .data(Collections.singletonList(new FloatVec(vector)))
-          .topK(param.getTopK().intValue())
-          .outputFields(param.getOutputFields())
-          .searchParams(searchParams)
-          .metricType(IndexParam.MetricType.valueOf(param.getMetricType()))
-          .build();
-    }
+    SearchReq searchReq = SearchReq.builder()
+        .collectionName(param.getCollectionName())
+        .data(Collections.singletonList(new FloatVec( param.getQueryVector())))
+        .topK(param.getTopK().intValue())
+        .outputFields(param.getOutputFields())
+        .searchParams(new HashMap<>(param.getMilvusOptions()))
+        .metricType(IndexParam.MetricType.valueOf(param.getMetricType()))
+        .filter(param.getFilterExpression())
+        .build();
 
     SearchResp response = client.search(searchReq);
 
-    List<Row> rows = parseSearchResultsV2(response, projectRowTypeMapForEnumerator);
+    List<Row> rows = parseSearchResults(response, projectRowTypeMapForEnumerator);
 
     return rows.iterator();
   }
 
 
-  private static List<Row> parseSearchResultsV2(
+  private static List<Row> parseSearchResults(
       SearchResp searchResponse,
       List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMapForEnumerator) {
 
@@ -170,7 +142,6 @@ public class MilvusVectorEnumerator implements Enumerator<Object> {
     Map<String, Object> entity = result.getEntity();
     double score = result.getScore();
 
-    // Use shared utility method (provide score for vector search)
     return MilvusProjectUtil.fillProjectRow(entity, score, projectRowTypeMap);
   }
 
@@ -185,10 +156,8 @@ public class MilvusVectorEnumerator implements Enumerator<Object> {
     if (iterator.hasNext()) {
       Row row = iterator.next();
       if (row.values.length == 1) {
-        // Single field - return the field value directly
         current = row.values[0];
       } else {
-        // Multiple fields - return the array
         current = row.values;
       }
       return true;

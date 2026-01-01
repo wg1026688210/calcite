@@ -16,7 +16,6 @@
  */
 package org.apache.calcite.adapter.milvus.operation;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,12 +28,11 @@ public class VectorSearchParam {
   private final String collectionName;
   private final String vectorField;
   private final List<Float> queryVector;
-  private final String  metricType;
+  private final String metricType;
   private final Long topK;
   private final String filterExpression;
   private final List<String> outputFields;
-  private final Map<String, String> searchParams; // e.g. nprobe, ef_search
-  private final VectorSearchHint searchHint; // SQL hints for search parameters
+  private final Map<String, String> milvusOptions;
 
   private VectorSearchParam(Builder builder) {
     this.collectionName = builder.collectionName;
@@ -44,8 +42,7 @@ public class VectorSearchParam {
     this.topK = builder.topK;
     this.filterExpression = builder.filterExpression;
     this.outputFields = builder.outputFields;
-    this.searchParams = builder.searchParams;
-    this.searchHint = builder.searchHint;
+    this.milvusOptions = builder.milvusOptions;
   }
 
   public String getCollectionName() {
@@ -76,17 +73,8 @@ public class VectorSearchParam {
     return outputFields;
   }
 
-  public Map<String, String> getSearchParams() {
-    return searchParams;
-  }
-
-  /**
-   * Gets the search hint containing index parameters.
-   *
-   * @return Search hint, or null if not set
-   */
-  public VectorSearchHint getSearchHint() {
-    return searchHint;
+  public Map<String, String> getMilvusOptions() {
+    return milvusOptions;
   }
 
   public static Builder builder() {
@@ -101,11 +89,10 @@ public class VectorSearchParam {
     private String vectorField;
     private List<Float> queryVector;
     private String metricType;
-    private Long topK ;
+    private Long topK;
     private String filterExpression;
     private List<String> outputFields;
-    private Map<String, String> searchParams;
-    private VectorSearchHint searchHint;
+    private Map<String, String> milvusOptions;
 
     public Builder collectionName(String collectionName) {
       this.collectionName = collectionName;
@@ -142,25 +129,8 @@ public class VectorSearchParam {
       return this;
     }
 
-    public Builder searchParams(Map<String, String> searchParams) {
-      this.searchParams = searchParams;
-      return this;
-    }
-
-    /**
-     * Sets search parameters from a VectorSearchHint.
-     *
-     * @param hint Vector search hint containing index parameters
-     * @return This builder
-     */
-    public Builder withHint(VectorSearchHint hint) {
-      this.searchHint = hint;
-      if (hint.getIndexParams() != null && !hint.getIndexParams().isEmpty()) {
-        if (this.searchParams == null) {
-          this.searchParams = new HashMap<>();
-        }
-        this.searchParams.putAll(hint.getIndexParams());
-      }
+    public Builder milvusOptions(Map<String, String> milvusOptions) {
+      this.milvusOptions = milvusOptions;
       return this;
     }
 
@@ -168,5 +138,4 @@ public class VectorSearchParam {
       return new VectorSearchParam(this);
     }
   }
-
 }
