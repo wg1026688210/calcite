@@ -20,10 +20,7 @@ import org.apache.calcite.adapter.milvus.MilvusBaseE2ETest;
 import org.apache.calcite.adapter.milvus.extension.MilvusExtension;
 import org.apache.calcite.adapter.milvus.util.TestEnvUtil;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
 
@@ -37,34 +34,35 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(MilvusExtension.class)
-public class MilvusScanQueryTest  extends MilvusBaseE2ETest {
+public class MilvusScanQueryTest extends MilvusBaseE2ETest {
   private static final String COLLECTION_NAME = "MilvusScanQueryTest";
   private Connection connection;
 
-  @BeforeEach
-  public void setUp() {
+  @BeforeAll
+  static void setupOnce() {
     TestEnvUtil testEnvUtil =
         new TestEnvUtil(COLLECTION_NAME, getMilvusServiceClientV1());
     testEnvUtil.createExampleCollection();
-    try {
-      connection = setupCalciteConnection();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
   }
 
-  @Test public void testStringConstant() throws SQLException {
+  @BeforeEach
+  public void setUp() throws Exception {
+    connection = setupCalciteConnection();
+  }
+
+  @Test
+  public void testStringConstant() throws SQLException {
     List<String> expected =
         Lists.newArrayList("三体,三体文明的到来改变了人类对宇宙的认知。,[0.8, 1.6, 2.4, 3.2]",
-        "围城,围城里的人想出去，城外的人想进来，这就是人生的矛盾。,[0.5, 1.0, 1.5, 2.0]",
-        "小王子,从前有个小王子住在一颗很小的星球上，那里有一朵他非常珍爱的玫瑰花。,[0.1, 0.2, 0.3, 0.4]",
-        "平凡的世界,生活虽然平凡，但每个人都有自己的梦想和追求。,[0.6, 1.2, 1.8000001, 2.4]",
-        "挪威的森林,挪威的森林中充满了青春的迷茫与彷徨。,[0.90000004, 1.8000001, 2.7, 3.6000001]",
-        "时间简史,时间是一种神秘的现象，它既无处不在，又难以捉摸。,[0.2, 0.4, 0.6, 0.8]",
-        "活着,人生如戏，我们都是这场戏中的演员，经历着喜怒哀乐。,[0.4, 0.8, 1.2, 1.6]",
-        "百年孤独,马孔多是一个充满魔幻色彩的小镇，那里发生了许多不可思议的故事。,[0.3, 0.6, 0.90000004, 1.2]",
-        "红楼梦,红楼梦是一部描写封建社会兴衰的伟大作品。,[0.7, 1.4, 2.1, 2.8]",
-        "追风筝的人,追风筝的人讲述了一个关于友谊与救赎的动人故事。,[1.0, 2.0, 3.0, 4.0]");
+            "围城,围城里的人想出去，城外的人想进来，这就是人生的矛盾。,[0.5, 1.0, 1.5, 2.0]",
+            "小王子,从前有个小王子住在一颗很小的星球上，那里有一朵他非常珍爱的玫瑰花。,[0.1, 0.2, 0.3, 0.4]",
+            "平凡的世界,生活虽然平凡，但每个人都有自己的梦想和追求。,[0.6, 1.2, 1.8000001, 2.4]",
+            "挪威的森林,挪威的森林中充满了青春的迷茫与彷徨。,[0.90000004, 1.8000001, 2.7, 3.6000001]",
+            "时间简史,时间是一种神秘的现象，它既无处不在，又难以捉摸。,[0.2, 0.4, 0.6, 0.8]",
+            "活着,人生如戏，我们都是这场戏中的演员，经历着喜怒哀乐。,[0.4, 0.8, 1.2, 1.6]",
+            "百年孤独,马孔多是一个充满魔幻色彩的小镇，那里发生了许多不可思议的故事。,[0.3, 0.6, 0.90000004, 1.2]",
+            "红楼梦,红楼梦是一部描写封建社会兴衰的伟大作品。,[0.7, 1.4, 2.1, 2.8]",
+            "追风筝的人,追风筝的人讲述了一个关于友谊与救赎的动人故事。,[1.0, 2.0, 3.0, 4.0]");
     String sql = String.format("select * from milvus.%s ", COLLECTION_NAME);
     String executionPlan = getExecutionPlan(sql, connection);
     assertTrue(containsMilvusOperator(executionPlan, MILVUS_SCAN));
@@ -75,7 +73,7 @@ public class MilvusScanQueryTest  extends MilvusBaseE2ETest {
         String bookName = resultSet.getString(1);
         String distance = resultSet.getString(2);
         String vector = resultSet.getString(3);
-        actual.add(String.format("%s,%s,%s", bookName, distance,vector));
+        actual.add(String.format("%s,%s,%s", bookName, distance, vector));
       }
       Assertions.assertEquals(expected, actual);
     }

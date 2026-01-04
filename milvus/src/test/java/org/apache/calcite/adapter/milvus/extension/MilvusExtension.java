@@ -47,7 +47,9 @@ public class MilvusExtension implements BeforeAllCallback, AfterAllCallback {
   private static MilvusClientV2 milvusClientV2;
   private static MilvusServiceClient milvusServiceClient; // V1 client for test data setup
 
-  @Override public void beforeAll(ExtensionContext context) {
+
+  @Override
+  public void beforeAll(ExtensionContext context) {
     if (containerUtil == null) {
       containerUtil = new ContainerUtil();
       containerUtil.startMilvusContainers();
@@ -73,22 +75,12 @@ public class MilvusExtension implements BeforeAllCallback, AfterAllCallback {
     }
   }
 
-  @Override public void afterAll(ExtensionContext context) {
-    // Clean up resources
-    if (containerUtil != null) {
-      containerUtil.clearAll();
-      containerUtil = null;
-    }
-
-    if (milvusClientV2 != null) {
-      milvusClientV2.close();
-      milvusClientV2 = null;
-    }
-
-    if (milvusServiceClient != null) {
-      milvusServiceClient.close();
-      milvusServiceClient = null;
-    }
+  @Override
+  public void afterAll(ExtensionContext context) {
+    // In Gradle builds, test classes can run concurrently even within the same worker.
+    // Tearing down a shared Testcontainers-backed Milvus instance here can break other test
+    // classes that are still executing.
+    // We intentionally keep the container alive for the duration of the test JVM.
   }
 
   /**

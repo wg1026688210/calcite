@@ -192,7 +192,7 @@ public class MathUtil {
 
     public static String genRandomStringAndChinese(int length) {
         String str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        String chinese = "富强民主文明和谐自由平等公正法治爱国敬业诚信友善";
+        String chinese = "一二三四五六七八九十";
         String strChinese = str + chinese;
         Random random = new Random();
         StringBuffer sb = new StringBuffer();

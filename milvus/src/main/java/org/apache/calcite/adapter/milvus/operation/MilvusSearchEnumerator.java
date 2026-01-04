@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.adapter.milvus.operation;
 
+import org.apache.calcite.adapter.milvus.factory.MilvusSchema;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.util.Pair;
 
@@ -34,11 +35,12 @@ import java.util.*;
  * Handles both vector-only queries and vector+scalar filter queries.
  */
 public class MilvusSearchEnumerator implements Enumerator<Object> {
+  private final MilvusClientV2 client;
   private final Iterator<Row> iterator;
   private Object current;
 
   public MilvusSearchEnumerator(
-      MilvusClientV2 client,
+      MilvusSchema schema,
       String vectorField,
       List<Float> queryVector,
       String metricType,
@@ -47,6 +49,8 @@ public class MilvusSearchEnumerator implements Enumerator<Object> {
       String collectionName,
       List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMap,
       @Nullable Map<String, String> milvusOptions) {
+
+    this.client = schema.createClient();
 
     List<String> outputFields = getOutputFields(projectRowTypeMap);
 
@@ -61,7 +65,7 @@ public class MilvusSearchEnumerator implements Enumerator<Object> {
         .milvusOptions(milvusOptions)
         .build();
 
-    this.iterator = createIterator(client, param, projectRowTypeMap);
+    this.iterator = createIterator(this.client, param, projectRowTypeMap);
   }
 
   private static List<String> getOutputFields(
@@ -172,7 +176,11 @@ public class MilvusSearchEnumerator implements Enumerator<Object> {
   }
 
   @Override public void close() {
-    // No-op for Milvus
+    try {
+      client.close();
+    } catch (Exception ignore) {
+      // ignore
+    }
   }
 
 }

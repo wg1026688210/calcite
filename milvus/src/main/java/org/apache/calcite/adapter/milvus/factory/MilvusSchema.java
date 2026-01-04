@@ -16,6 +16,8 @@
  */
 package org.apache.calcite.adapter.milvus.factory;
 
+import io.milvus.v2.service.collection.request.LoadCollectionReq;
+
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 
@@ -32,9 +34,44 @@ import java.util.Map;
 public class MilvusSchema extends AbstractSchema {
   private final Map<String, Table> tableMap = new HashMap<>();
 
+  private final String host;
+  private final Integer port;
+  private final String databaseName;
+  private final String user;
+  private final String password;
+
   public MilvusSchema(String host, Integer port, String databaseName, String user,
       String password) {
     super();
+    this.host = host;
+    this.port = port;
+    this.databaseName = databaseName;
+    this.user = user;
+    this.password = password;
+  }
+
+  @Override
+  protected synchronized Map<String, Table> getTableMap() {
+    MilvusClientV2 client = createClient();
+    try {
+      ListCollectionsResp list = client.listCollections();
+      if (list.getCollectionNames() != null) {
+        for (String name : list.getCollectionNames()) {
+          tableMap.computeIfAbsent(name, n ->
+              new MilvusTranslatableTable(this, n, getCollectionSchema(n, client)));
+        }
+      }
+    } finally {
+      try {
+        client.close();
+      } catch (Exception ignore) {
+        // ignore
+      }
+    }
+    return tableMap;
+  }
+
+  public MilvusClientV2 createClient() {
     ConnectConfig.ConnectConfigBuilder uri = ConnectConfig.builder()
         .uri("http://" + host + ":" + port);
 
@@ -46,17 +83,11 @@ public class MilvusSchema extends AbstractSchema {
       uri.password(password);
     }
 
-    MilvusClientV2 milvusClient = new MilvusClientV2(uri.build());
-
-    ListCollectionsResp listCollectionsResponse = milvusClient.listCollections();
-
-    for (String collectionName : listCollectionsResponse.getCollectionNames()) {
-
-      tableMap.put(collectionName,
-          new MilvusTranslatableTable(milvusClient, collectionName,
-              getCollectionSchema(collectionName, milvusClient)));
+    if (databaseName != null) {
+      uri.dbName(databaseName);
     }
 
+    return new MilvusClientV2(uri.build());
   }
 
   private CreateCollectionReq.CollectionSchema getCollectionSchema(String collectionName,
@@ -66,9 +97,5 @@ public class MilvusSchema extends AbstractSchema {
     DescribeCollectionResp describeCollectionResp =
         milvusClient.describeCollection(req);
     return describeCollectionResp.getCollectionSchema();
-  }
-
-  @Override protected Map<String, Table> getTableMap() {
-    return tableMap;
   }
 }

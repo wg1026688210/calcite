@@ -23,9 +23,7 @@ import org.apache.calcite.adapter.milvus.util.TestEnvUtil;
 
 import com.google.common.collect.Lists;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.sql.Connection;
@@ -42,15 +40,20 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
   private static final String FLOAT_VECTOR_COLLECTION_NAME = "test_vector_search";
   private Connection connection;
 
-  @BeforeEach
-  void setup() throws Exception {
+  @BeforeAll
+  static void setupOnce() {
     TestEnvUtil testEnvUtil =
         new TestEnvUtil(FLOAT_VECTOR_COLLECTION_NAME, getMilvusServiceClientV1());
     testEnvUtil.createExampleCollection();
+  }
+
+  @BeforeEach
+  void setup() throws Exception {
     this.connection = setupCalciteConnection();
   }
 
-  @Test void testVectorSimilaritySearch() throws Exception {
+  @Test
+  void testVectorSimilaritySearch() throws Exception {
     String queryVector = "[0.1, 0.2, 0.3, 0.4]";
 
     {
@@ -69,11 +72,11 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
       assertTrue(containsMilvusOperator(executionPlan, MILVUS_VECTOR_SEARCH));
       assertEquals(
           Lists.newArrayList(
-          "小王子,0",
-          "时间简史,0.3",
-          "百年孤独,1.2",
-          "活着,2.7",
-          "围城,4.8"), getSqlResult(sql, connection, 2));
+              "小王子,0",
+              "时间简史,0.3",
+              "百年孤独,1.2",
+              "活着,2.7",
+              "围城,4.8"), getSqlResult(sql, connection, 2));
     }
 
     {
@@ -98,7 +101,6 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
               "test,2.7",
               "test,4.8"), getSqlResult(sql, connection, 2));
     }
-
 
 
     {
@@ -134,7 +136,7 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
               CommonData.defaultVectorField,
               queryVector,
               FLOAT_VECTOR_COLLECTION_NAME);
-      String executionPlan1 = getExecutionPlan(sql, connection);
+      String executionPlan1 = getExecutionPlan(sql1, connection);
       assertTrue(containsMilvusOperator(executionPlan1, MILVUS_FILTER));
       assertTrue(containsMilvusOperator(executionPlan1, MILVUS_SCAN));
       assertEquals(Lists.newArrayList("三体,14.7"), getSqlResult(sql1, connection, 2));
@@ -142,24 +144,25 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
 
   }
 
-  @Test public void testNotPushDown() throws SQLException {
+  @Test
+  public void testNotPushDown() throws SQLException {
     String queryVector = "[0.1, 0.2, 0.3, 0.4]";
     ArrayList<String> expected =
         Lists.newArrayList("小王子,0",
-        "时间简史,0.55",
-        "百年孤独,1.1",
-        "活着,1.64",
-        "围城,2.19");
+            "时间简史,0.55",
+            "百年孤独,1.1",
+            "活着,1.64",
+            "围城,2.19");
     {
       String sql =
           String.format("SELECT  book_name, l2_distance(%s, '%s') AS distance " +
-              "FROM milvus.%s " +
-              "WHERE  CHAR_LENGTH(%s) < 9999 " +
-              "ORDER BY 2 " +
-              "LIMIT 5",
-          CommonData.defaultVectorField, queryVector,
-          FLOAT_VECTOR_COLLECTION_NAME,
-          "book_name");
+                  "FROM milvus.%s " +
+                  "WHERE  CHAR_LENGTH(%s) < 9999 " +
+                  "ORDER BY 2 " +
+                  "LIMIT 5",
+              CommonData.defaultVectorField, queryVector,
+              FLOAT_VECTOR_COLLECTION_NAME,
+              "book_name");
       String executionPlan = getExecutionPlan(sql, connection);
       assertTrue(containsMilvusOperator(executionPlan, MILVUS_SCAN));
       assertFalse(containsMilvusOperator(executionPlan, MILVUS_VECTOR_SEARCH),
@@ -170,14 +173,14 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
     {
       String sql =
           String.format("SELECT book_name, distance FROM ( " +
-              "SELECT book_name, l2_distance(%s, '%s') AS distance " +
-              "FROM milvus.%s " +
-              ") AS subquery " +
-              "WHERE distance < 10 " +
-              "ORDER BY distance " +
-              "LIMIT 5",
-          CommonData.defaultVectorField, queryVector,
-          FLOAT_VECTOR_COLLECTION_NAME);
+                  "SELECT book_name, l2_distance(%s, '%s') AS distance " +
+                  "FROM milvus.%s " +
+                  ") AS subquery " +
+                  "WHERE distance < 10 " +
+                  "ORDER BY distance " +
+                  "LIMIT 5",
+              CommonData.defaultVectorField, queryVector,
+              FLOAT_VECTOR_COLLECTION_NAME);
 
       String executionPlan = getExecutionPlan(sql, connection);
       assertTrue(containsMilvusOperator(executionPlan, MILVUS_SCAN));
@@ -190,12 +193,15 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
     }
   }
 
-  @Test public void testComplexQuery() throws SQLException {
+  @Test
+  public void testComplexQuery() throws SQLException {
 
     {
       String sql =
-          "SELECT B.book_name ,A.book_name, l2_distance(A.VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') AS distance FROM milvus.test_vector_search A join milvus.test_vector_search B on A.book_name= B.book_name \n"
-  +
+          "SELECT B.book_name ,A.book_name, l2_distance(A.VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0" +
+              ".4]') AS distance FROM milvus.test_vector_search A join milvus.test_vector_search " +
+              "B on A.book_name= B.book_name \n"
+              +
               "WHERE  CHAR_LENGTH(A.book_name) < 9999 ORDER BY 3 LIMIT 5";
       String executionPlan = getExecutionPlan(sql, connection);
       getSqlResult(sql, connection, 2);
@@ -203,25 +209,29 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
       List<String> actual = getSqlResult(sql, connection);
       List<String> expected =
           Lists.newArrayList("小王子,小王子,0.0",
-          "时间简史,时间简史,0.5477225697477194",
-          "百年孤独,百年孤独,1.0954451966273537",
-          "活着,活着,1.6431677378091152",
-          "围城,围城,2.1908902789908775");
+              "时间简史,时间简史,0.5477225697477194",
+              "百年孤独,百年孤独,1.0954451966273537",
+              "活着,活着,1.6431677378091152",
+              "围城,围城,2.1908902789908775");
       assertEquals(expected, actual);
     }
 
     {
       // test aggregation and union with vector search
       String sql =
-          "SELECT '近距离' as range_type, COUNT(*) as book_count FROM milvus.test_vector_search WHERE l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') < 1\n"
-  +
+          "SELECT '近距离' as range_type, COUNT(*) as book_count FROM milvus.test_vector_search " +
+              "WHERE l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') < 1\n"
+              +
               "UNION ALL\n"
-  +
-              "SELECT '中距离' as range_type, COUNT(*) as book_count FROM milvus.test_vector_search WHERE l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') >= 1 AND l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') < 2\n"
-  +
+              +
+              "SELECT '中距离' as range_type, COUNT(*) as book_count FROM milvus.test_vector_search " +
+              "WHERE l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') >= 1 AND " +
+              "l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') < 2\n"
+              +
               "UNION ALL\n"
-  +
-              "SELECT '远距离' as range_type, COUNT(*) as book_count FROM milvus.test_vector_search WHERE l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') >= 2";
+              +
+              "SELECT '远距离' as range_type, COUNT(*) as book_count FROM milvus.test_vector_search " +
+              "WHERE l2_distance(VectorFieldAutoTest, '[0.1, 0.2, 0.3, 0.4]') >= 2";
 
       String executionPlan = getExecutionPlan(sql, connection);
       System.out.println(executionPlan);
@@ -229,44 +239,52 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
 
       List<String> expected =
           Lists.newArrayList("近距离,2",
-          "中距离,2",
-          "远距离,6");
+              "中距离,2",
+              "远距离,6");
       assertEquals(expected, actual);
     }
   }
 
-  @Test void testVectorSearchWithTableHint() throws Exception {
+  @Test
+  void testVectorSearchWithTableHint() throws Exception {
     String queryVector = "[0.1, 0.2, 0.3, 0.4]";
 
-      String sql =
-          String.format(
-              "SELECT book_name, l2_distance(%s, '%s') AS d\n"
-                  + "FROM milvus.%s /*+ MILVUS_OPTIONS(nprobe='100000') */\n"
-                  + "WHERE book_name <> '小王子'\n"
-                  + "ORDER BY d\n"
-                  + "LIMIT 3",
-              CommonData.defaultVectorField,
-              queryVector,
-              FLOAT_VECTOR_COLLECTION_NAME);
+    String sql =
+        String.format(
+            "SELECT book_name, l2_distance(%s, '%s') AS d\n"
+                + "FROM milvus.%s /*+ MILVUS_OPTIONS(nprobe='100000') */\n"
+                + "WHERE book_name <> '小王子'\n"
+                + "ORDER BY d\n"
+                + "LIMIT 3",
+            CommonData.defaultVectorField,
+            queryVector,
+            FLOAT_VECTOR_COLLECTION_NAME);
 
-      List<String> results = getSqlResult(sql, connection, 2);
-      assertEquals(3, results.size(), "Should return exactly 3 results with filter");
-      assertFalse(results.get(0).contains("小王子"), "Filtered results should not include 小王子");
+    List<String> results = getSqlResult(sql, connection, 2);
+    assertEquals(3, results.size(), "Should return exactly 3 results with filter");
+    assertFalse(results.get(0).contains("小王子"), "Filtered results should not include 小王子");
   }
 
-  @Test void testVectorSearchWithCosineHint() throws Exception {
+  @Test
+  void testVectorSearchWithCosineHint() throws Exception {
     String queryVector = "[0.1, 0.2, 0.3, 0.4]";
 
-    // Test hint with cosine distance function (IVFFLAT support)
+    // Create a COSINE-metric collection for this test.
+    final String cosineCollection = "test_vector_search_cosine";
+    TestEnvUtil cosineEnv = new TestEnvUtil(cosineCollection, getMilvusServiceClientV1(),
+        io.milvus.param.MetricType.COSINE);
+    cosineEnv.createExampleCollection();
+
+    // Test hint with cosine distance function (requires COSINE metric)
     String sql =
         String.format(
             "SELECT book_name, cosine_distance(%s, '%s') AS similarity\n"
-                + "FROM milvus.%s /*+ MILVUS_OPTIONS(nprobe=32) */\n"
+                + "FROM milvus.%s /*+ MILVUS_OPTIONS(nprobe='32') */\n"
                 + "ORDER BY similarity DESC\n"
                 + "LIMIT 5",
             CommonData.defaultVectorField,
             queryVector,
-            FLOAT_VECTOR_COLLECTION_NAME);
+            cosineCollection);
 
     String executionPlan = getExecutionPlan(sql, connection);
     assertTrue(containsMilvusOperator(executionPlan, MILVUS_VECTOR_SEARCH));
@@ -275,9 +293,8 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
     assertEquals(5, results.size());
   }
 
-
   @AfterEach
-  public void tearDown() throws Exception {
+  void tearDown() throws Exception {
     if (connection != null && !connection.isClosed()) {
       connection.close();
     }

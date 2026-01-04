@@ -25,8 +25,9 @@ import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaPlus;
 
 import io.milvus.client.MilvusServiceClient;
-import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;
+
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -41,7 +42,8 @@ import java.util.*;
  * {@code @ExtendWith(MilvusExtension.class)} to ensure Milvus containers
  * are properly initialized.
  */
-public class MilvusBaseE2ETest {
+@ExtendWith(MilvusExtension.class)
+public abstract class MilvusBaseE2ETest {
 
   public static final String MILVUS_CONVERTER = "MilvusToEnumerableConverter";
   public static final String MILVUS_FILTER = "MilvusFilter";
@@ -64,14 +66,7 @@ public class MilvusBaseE2ETest {
 
 
   public static MilvusClientV2 getMilvusServiceClientV2() {
-    Map<String, Object> params = MilvusExtension.getConnectionParams();
-    String host = (String) params.get("host");
-    Integer port = (Integer) params.get("port");
-
-    ConnectConfig connectConfig = ConnectConfig.builder()
-        .uri("http://" + host + ":" + port)
-        .build();
-    return new MilvusClientV2(connectConfig);
+    return MilvusExtension.getMilvusClient();
   }
 
 
@@ -158,11 +153,8 @@ public class MilvusBaseE2ETest {
     // Add to root
     rootSchema.add("milvus", milvusSchema);
 
-    System.out.println("[setupCalciteConnection] Milvus hint strategies enabled for JDBC execution");
     return connection;
   }
-
-
 
   protected List<String> getSqlResult(String sql, Connection connection) throws SQLException {
     try (Statement statement = connection.createStatement()) {

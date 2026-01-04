@@ -51,7 +51,7 @@ import java.util.List;
 @ExtendWith(MilvusExtension.class)
 public class SelectTest extends MilvusBaseE2ETest {
 
-  private static final String RANDOM_COLLECTION = "InsertTest";
+  private static final String RANDOM_COLLECTION = "SelectTest";
   private static MilvusTestUtil MILVUS_TEST_UTIL;
 
   /**

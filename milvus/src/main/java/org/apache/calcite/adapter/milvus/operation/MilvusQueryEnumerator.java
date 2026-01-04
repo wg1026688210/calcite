@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.adapter.milvus.operation;
 
+import org.apache.calcite.adapter.milvus.factory.MilvusSchema;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.util.Pair;
 
@@ -31,16 +32,19 @@ import java.util.List;
  */
 public class MilvusQueryEnumerator implements Enumerator<Object> {
   private static final int DEFAULT_PAGINATION_SIZE = 1;
+  private final MilvusClientV2 client;
   private final Iterator<Row> iterator;
   private Object current;
 
   public MilvusQueryEnumerator(
-      MilvusClientV2 client,
+      MilvusSchema schema,
       String collectionName,
       @Nullable String filterExpression,
       @Nullable List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMapForEnumerator) {
+    this.client = schema.createClient();
     this.iterator =
-        createIterator(client, collectionName, filterExpression, DEFAULT_PAGINATION_SIZE, projectRowTypeMapForEnumerator);
+        createIterator(this.client, collectionName, filterExpression, DEFAULT_PAGINATION_SIZE,
+            projectRowTypeMapForEnumerator);
     this.current = null;
   }
 
@@ -82,8 +86,11 @@ public class MilvusQueryEnumerator implements Enumerator<Object> {
   }
 
   @Override public void close() {
-
+    try {
+      client.close();
+    } catch (Exception ignore) {
+      // ignore
+    }
   }
-
 
 }

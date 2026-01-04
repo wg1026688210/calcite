@@ -21,6 +21,7 @@ import org.apache.calcite.adapter.milvus.extension.MilvusExtension;
 import org.apache.calcite.adapter.milvus.util.TestEnvUtil;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,16 +47,16 @@ public class MilvusFilterQueryTest extends MilvusBaseE2ETest {
   private static final String COLLECTION_NAME = "MilvusQueryFilterTest";
   private Connection connection;
 
-  @BeforeEach
-  public void setUp() {
+  @BeforeAll
+  static void setupOnce() {
     TestEnvUtil testEnvUtil =
         new TestEnvUtil(COLLECTION_NAME, getMilvusServiceClientV1());
     testEnvUtil.createExampleCollection();
-    try {
-      connection = setupCalciteConnection();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+  }
+
+  @BeforeEach
+  public void setUp() throws Exception {
+    connection = setupCalciteConnection();
   }
 
 

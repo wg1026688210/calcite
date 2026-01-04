@@ -39,7 +39,6 @@ import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Pair;
 
-import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.common.DataType;
 import io.milvus.v2.service.collection.request.CreateCollectionReq;
 
@@ -50,13 +49,14 @@ import java.util.Map;
 
 public class MilvusTranslatableTable extends AbstractTable
     implements QueryableTable, TranslatableTable {
-  private final MilvusClientV2 milvusClient;
+  private final MilvusSchema schema;
   private final String collectionName;
   private final CreateCollectionReq.CollectionSchema collectionSchema;
 
-  public MilvusTranslatableTable(MilvusClientV2 milvusClient, String collectionName,CreateCollectionReq.CollectionSchema collectionSchema) {
+  public MilvusTranslatableTable(MilvusSchema schema, String collectionName,
+      CreateCollectionReq.CollectionSchema collectionSchema) {
     this.collectionName = collectionName;
-    this.milvusClient = milvusClient;
+    this.schema = schema;
     this.collectionSchema = collectionSchema;
 
   }
@@ -136,7 +136,7 @@ public class MilvusTranslatableTable extends AbstractTable
     return new AbstractEnumerable<Object>() {
       @Override public Enumerator<Object> enumerator() {
         return new MilvusQueryEnumerator(
-            milvusClient,
+            MilvusTranslatableTable.this.schema,
             collectionName,
             filterExpression,
             projectRowTypeMapForEnumerator);
@@ -156,7 +156,7 @@ public class MilvusTranslatableTable extends AbstractTable
     return new AbstractEnumerable<Object>() {
       @Override public Enumerator<Object> enumerator() {
         return new MilvusSearchEnumerator(
-            milvusClient,
+            MilvusTranslatableTable.this.schema,
             vectorField,
             queryVector,
             metricType,

@@ -83,7 +83,7 @@ public class MilvusTestUtil {
             .withShardsNum(2)
             .withSchema(schemaParam)
             .build();
-    R<RpcStatus> collection = milvusServiceClient.createCollection(createCollectionReq);
+    milvusServiceClient.createCollection(createCollectionReq);
     logger.info("Create String pk and binary vector collection:" + collectionName);
   }
 
