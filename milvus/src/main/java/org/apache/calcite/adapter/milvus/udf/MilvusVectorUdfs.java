@@ -67,7 +67,7 @@ public class MilvusVectorUdfs {
       try {
         String numStr = part.trim();
 
-        result.add(parseFloat(numStr));
+        result.add(Float.parseFloat(numStr));
       } catch (NumberFormatException e) {
         throw new IllegalArgumentException(
             "Invalid query vector format. Expected a JSON array of floats, e.g., \"[0.1, 0.2, 0.3]\"",

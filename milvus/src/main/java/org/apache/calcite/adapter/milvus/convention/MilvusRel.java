@@ -39,17 +39,21 @@ public interface MilvusRel extends RelNode {
 
   class Implementor {
     public final RexBuilder rexBuilder;
+
     //scan
     public RelOptTable table;
     public MilvusTranslatableTable milvusTable;
     public RelDataType rowType;
     public Map<String,String> milvusOptions;
+
     // filter
     public RexNode filterCondition;
+
     // project
     public RelDataType projectRowType;
     public List<RexNode> projects;
-    // sort
+
+    // vector search
     public RexNode vectorDistanceExpr;
     public Integer vectorDistanceFieldIndex;
     public RelFieldCollation.Direction sortOrder;

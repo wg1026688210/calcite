@@ -117,7 +117,6 @@ public class MilvusBaseE2ETest {
   /**
    * Set up a Calcite connection with Milvus schema.
    * <p>
-   * Note: This connection is configured with MILVUS_OPTIONS hint support.
    * We use this method to register hint strategies so that
    * context.getTableHints() can return hints.
    *
@@ -165,7 +164,7 @@ public class MilvusBaseE2ETest {
 
 
 
-  protected List<String> checkSqlResult(String sql, Connection connection) throws SQLException {
+  protected List<String> getSqlResult(String sql, Connection connection) throws SQLException {
     try (Statement statement = connection.createStatement()) {
       ResultSet resultSet = statement.executeQuery(sql);
       List<String> actual = new ArrayList<>();
@@ -186,7 +185,7 @@ public class MilvusBaseE2ETest {
   }
 
 
-  protected List<String> checkSqlResult(String sql, Connection connection, int distanceScale)
+  protected List<String> getSqlResult(String sql, Connection connection, int distanceScale)
       throws SQLException {
     try (Statement statement = connection.createStatement()) {
       ResultSet resultSet = statement.executeQuery(sql);

@@ -73,7 +73,7 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
           "时间简史,0.3",
           "百年孤独,1.2",
           "活着,2.7",
-          "围城,4.8"), checkSqlResult(sql, connection, 2));
+          "围城,4.8"), getSqlResult(sql, connection, 2));
     }
 
     {
@@ -96,7 +96,7 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
               "test,0.3",
               "test,1.2",
               "test,2.7",
-              "test,4.8"), checkSqlResult(sql, connection, 2));
+              "test,4.8"), getSqlResult(sql, connection, 2));
     }
 
 
@@ -123,7 +123,7 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
               "活着,2.7",
               "围城,4.8",
               "平凡的世界,7.5"),
-          checkSqlResult(sql, connection, 2));
+          getSqlResult(sql, connection, 2));
 
       String sql1 =
           String.format("SELECT book_name, l2_distance(%s, '%s') AS d " +
@@ -137,7 +137,7 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
       String executionPlan1 = getExecutionPlan(sql, connection);
       assertTrue(containsMilvusOperator(executionPlan1, MILVUS_FILTER));
       assertTrue(containsMilvusOperator(executionPlan1, MILVUS_SCAN));
-      assertEquals(Lists.newArrayList("三体,14.7"), checkSqlResult(sql1, connection, 2));
+      assertEquals(Lists.newArrayList("三体,14.7"), getSqlResult(sql1, connection, 2));
     }
 
   }
@@ -185,7 +185,7 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
           "Execution plan should not contain MilvusFilter for vector UDF filter");
       assertEquals(
           expected,
-          checkSqlResult(sql, connection, 2));
+          getSqlResult(sql, connection, 2));
 
     }
   }
@@ -198,9 +198,9 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
   +
               "WHERE  CHAR_LENGTH(A.book_name) < 9999 ORDER BY 3 LIMIT 5";
       String executionPlan = getExecutionPlan(sql, connection);
-      checkSqlResult(sql, connection, 2);
+      getSqlResult(sql, connection, 2);
       System.out.println(executionPlan);
-      List<String> actual = checkSqlResult(sql, connection);
+      List<String> actual = getSqlResult(sql, connection);
       List<String> expected =
           Lists.newArrayList("小王子,小王子,0.0",
           "时间简史,时间简史,0.5477225697477194",
@@ -225,7 +225,7 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
 
       String executionPlan = getExecutionPlan(sql, connection);
       System.out.println(executionPlan);
-      List<String> actual = checkSqlResult(sql, connection);
+      List<String> actual = getSqlResult(sql, connection);
 
       List<String> expected =
           Lists.newArrayList("近距离,2",
@@ -249,7 +249,7 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
               queryVector,
               FLOAT_VECTOR_COLLECTION_NAME);
 
-      List<String> results = checkSqlResult(sql, connection, 2);
+      List<String> results = getSqlResult(sql, connection, 2);
       assertEquals(3, results.size(), "Should return exactly 3 results with filter");
       assertFalse(results.get(0).contains("小王子"), "Filtered results should not include 小王子");
   }
@@ -271,7 +271,7 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
     String executionPlan = getExecutionPlan(sql, connection);
     assertTrue(containsMilvusOperator(executionPlan, MILVUS_VECTOR_SEARCH));
 
-    List<String> results = checkSqlResult(sql, connection, 2);
+    List<String> results = getSqlResult(sql, connection, 2);
     assertEquals(5, results.size());
   }
 

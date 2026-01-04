@@ -65,7 +65,7 @@ public class MilvusFilterQueryTest extends MilvusBaseE2ETest {
     String executionPlan = getExecutionPlan(sql, connection);
     assertTrue(containsMilvusOperator(executionPlan, MILVUS_FILTER), "Filter should be pushed down to Milvus");
 
-    List<String> result = checkSqlResult(sql, connection);
+    List<String> result = getSqlResult(sql, connection);
 
     // Expected: exactly one book with name '三体'
     List<String> expected =
@@ -80,7 +80,7 @@ public class MilvusFilterQueryTest extends MilvusBaseE2ETest {
     String executionPlan = getExecutionPlan(sql, connection);
     assertTrue(containsMilvusOperator(executionPlan, MILVUS_FILTER), "Filter should be pushed down to Milvus");
 
-    List<String> result = checkSqlResult(sql, connection);
+    List<String> result = getSqlResult(sql, connection);
 
     // Expected: all books except '三体'
     List<String> expected =
@@ -103,7 +103,7 @@ public class MilvusFilterQueryTest extends MilvusBaseE2ETest {
     String executionPlan = getExecutionPlan(sql, connection);
     assertTrue(containsMilvusOperator(executionPlan, MILVUS_FILTER), "Filter should be pushed down to Milvus");
 
-    List<String> result = checkSqlResult(sql, connection);
+    List<String> result = getSqlResult(sql, connection);
 
     List<String> expected =
         Lists.newArrayList("三体");
@@ -117,7 +117,7 @@ public class MilvusFilterQueryTest extends MilvusBaseE2ETest {
     String executionPlan = getExecutionPlan(sql, connection);
     assertTrue(containsMilvusOperator(executionPlan, MILVUS_FILTER), "Filter should be pushed down to Milvus");
 
-    List<String> result = checkSqlResult(sql, connection);
+    List<String> result = getSqlResult(sql, connection);
 
     List<String> expected =
         Lists.newArrayList("三体");
@@ -133,7 +133,7 @@ public class MilvusFilterQueryTest extends MilvusBaseE2ETest {
       String executionPlan = getExecutionPlan(sql, connection);
       assertFalse(containsMilvusOperator(executionPlan,MILVUS_FILTER));
 
-      List<String> result = checkSqlResult(sql, connection);
+      List<String> result = getSqlResult(sql, connection);
 
       List<String> expected =
           Lists.newArrayList("平凡的世界",

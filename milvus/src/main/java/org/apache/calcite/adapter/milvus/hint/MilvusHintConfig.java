@@ -21,22 +21,14 @@ import org.apache.calcite.rel.hint.HintStrategyTable;
 
 /**
  * Utility class for configuring Milvus SQL hints.
- *
- * <p>This class provides centralized configuration for Milvus-specific SQL hints.
- * <p>Usage examples:
- * <ul>
- *   <li>Production: Configure via SqlToRelConverter.Config</li>
- *   <li>Testing: Use with Frameworks API</li>
- * </ul>
  */
 public class MilvusHintConfig {
 
   /** Hint name for general Milvus options. */
   public static final String MILVUS_OPTIONS = "MILVUS_OPTIONS";
+
   /**
    * Creates a HintStrategyTable for Milvus SQL hints.
-   *
-   * @return HintStrategyTable configured for Milvus hints
    */
   public static HintStrategyTable createHintStrategyTable() {
     return HintStrategyTable.builder()

@@ -95,9 +95,10 @@ public class MilvusToEnumerableConverter
     final Expression tableExpr =
         Expressions.convert_(table, MilvusTranslatableTable.class);
     Map<String, String> milvusOptions = milvusImplementor.milvusOptions;
-    // expose milvusOptions as an expression so it can be passed to the runtime vectorSearch call
+    // hint
     final Expression milvusOptionsExpr =
         list.append("milvusOptions", Expressions.constant(milvusOptions, Map.class));
+
     //project
     final RelDataType rowType = milvusImplementor.projectRowType != null
         ? milvusImplementor.projectRowType
@@ -125,6 +126,7 @@ public class MilvusToEnumerableConverter
 
     Expression enumerable;
     if (milvusImplementor.vectorDistanceExpr == null) {
+      // page scan
       enumerable =
           list.append(
               "enumerable", Expressions.call(tableExpr,

@@ -64,7 +64,7 @@ public class MilvusProjectQueryTest extends MilvusBaseE2ETest {
     String sql = String.format("select book_name ,'xxx' from milvus.%s ", COLLECTION_NAME);
     String executionPlan = getExecutionPlan(sql, connection);
     assertTrue(containsMilvusOperator(executionPlan, MILVUS_PROJECT));
-    List<String> result = checkSqlResult(sql, connection);
+    List<String> result = getSqlResult(sql, connection);
     System.out.println(result);
   }
 
@@ -73,7 +73,7 @@ public class MilvusProjectQueryTest extends MilvusBaseE2ETest {
       String sql = String.format("select book_name ,1 from milvus.%s ", COLLECTION_NAME);
       String executionPlan = getExecutionPlan(sql, connection);
       assertTrue(containsMilvusOperator(executionPlan, MILVUS_PROJECT));
-      List<String> result = checkSqlResult(sql, connection);
+      List<String> result = getSqlResult(sql, connection);
       System.out.println(result);
     }
 
@@ -81,7 +81,7 @@ public class MilvusProjectQueryTest extends MilvusBaseE2ETest {
       String sql = String.format("select book_name ,1.1 from milvus.%s ", COLLECTION_NAME);
       String executionPlan = getExecutionPlan(sql, connection);
       assertTrue(containsMilvusOperator(executionPlan, MILVUS_PROJECT));
-      List<String> result = checkSqlResult(sql, connection);
+      List<String> result = getSqlResult(sql, connection);
       System.out.println(result);
     }
   }
