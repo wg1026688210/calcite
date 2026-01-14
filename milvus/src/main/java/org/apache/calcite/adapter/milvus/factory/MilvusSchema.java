@@ -16,11 +16,11 @@
  */
 package org.apache.calcite.adapter.milvus.factory;
 
-import io.milvus.v2.service.collection.request.LoadCollectionReq;
-
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 
+import io.milvus.pool.MilvusClientV2Pool;
+import io.milvus.pool.PoolConfig;
 import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.collection.request.CreateCollectionReq;
@@ -40,6 +40,9 @@ public class MilvusSchema extends AbstractSchema {
   private final String user;
   private final String password;
 
+  private final String poolKey;
+  private final MilvusClientV2Pool clientPool;
+
   public MilvusSchema(String host, Integer port, String databaseName, String user,
       String password) {
     super();
@@ -48,30 +51,32 @@ public class MilvusSchema extends AbstractSchema {
     this.databaseName = databaseName;
     this.user = user;
     this.password = password;
-  }
 
-  @Override
-  protected synchronized Map<String, Table> getTableMap() {
-    MilvusClientV2 client = createClient();
+    // A stable identifier for a group of pooled clients (keyed pool).
+    this.poolKey = buildPoolKey(host, port, databaseName, user);
+
     try {
-      ListCollectionsResp list = client.listCollections();
-      if (list.getCollectionNames() != null) {
-        for (String name : list.getCollectionNames()) {
-          tableMap.computeIfAbsent(name, n ->
-              new MilvusTranslatableTable(this, n, getCollectionSchema(n, client)));
-        }
-      }
-    } finally {
-      try {
-        client.close();
-      } catch (Exception ignore) {
-        // ignore
-      }
+      this.clientPool = new MilvusClientV2Pool(
+          PoolConfig.builder().build(),
+          buildConnectConfig());
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to initialize MilvusClientV2Pool", e);
     }
-    return tableMap;
   }
 
-  public MilvusClientV2 createClient() {
+  private static String buildPoolKey(String host, Integer port, String databaseName, String user) {
+    StringBuilder sb = new StringBuilder();
+    sb.append(host).append(':').append(port);
+    if (databaseName != null) {
+      sb.append("/").append(databaseName);
+    }
+    if (user != null) {
+      sb.append("?user=").append(user);
+    }
+    return sb.toString();
+  }
+
+  private ConnectConfig buildConnectConfig() {
     ConnectConfig.ConnectConfigBuilder uri = ConnectConfig.builder()
         .uri("http://" + host + ":" + port);
 
@@ -87,7 +92,46 @@ public class MilvusSchema extends AbstractSchema {
       uri.dbName(databaseName);
     }
 
-    return new MilvusClientV2(uri.build());
+    return uri.build();
+  }
+
+  /** Borrow a MilvusClientV2 from the SDK pool. Caller must return it. */
+  public MilvusClientV2 borrowClient() {
+    return clientPool.getClient(poolKey);
+  }
+
+  /** Return a MilvusClientV2 back to the SDK pool. */
+  public void returnClient(MilvusClientV2 client) {
+    if (client == null) {
+      return;
+    }
+    clientPool.returnClient(poolKey, client);
+  }
+
+  @Override
+  protected synchronized Map<String, Table> getTableMap() {
+    MilvusClientV2 client = borrowClient();
+    try {
+      ListCollectionsResp list = client.listCollections();
+      if (list.getCollectionNames() != null) {
+        for (String name : list.getCollectionNames()) {
+          tableMap.computeIfAbsent(name, n ->
+              new MilvusTranslatableTable(this, n, getCollectionSchema(n, client)));
+        }
+      }
+    } finally {
+      returnClient(client);
+    }
+    return tableMap;
+  }
+
+  /**
+   * Compatibility escape hatch: create a standalone client.
+   *
+   * <p>Prefer {@link #borrowClient()} / {@link #returnClient(MilvusClientV2)} for pooling.
+   */
+  public MilvusClientV2 createClient() {
+    return new MilvusClientV2(buildConnectConfig());
   }
 
   private CreateCollectionReq.CollectionSchema getCollectionSchema(String collectionName,
