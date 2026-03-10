@@ -14,24 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-val testOutput = configurations.create("testOutput") {
-  extendsFrom(configurations.testRuntimeClasspath.get())
-  isCanBeConsumed = true
-  isCanBeResolved = false
-}
+package org.apache.calcite.adapter.milvus.sql.client.command;
 
-artifacts {
-  add("testOutput", sourceSets.test.get().java.destinationDirectory.get())
-}
+import org.apache.calcite.adapter.milvus.sql.client.response.MySQLResponseBuilder;
 
-dependencies {
-    api(project(":core"))
-    api(project(":linq4j"))
+import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
-    implementation("io.milvus:milvus-sdk-java:2.5.13")
+import java.sql.SQLException;
+import java.util.Collection;
+import java.util.Collections;
 
-    testImplementation(platform("org.junit:junit-bom:5.10.0"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testImplementation("org.testcontainers:testcontainers")
-    testImplementation(project(":testkit"))
+/**
+ * Executor for MySQL COM_PING commands.
+ * Returns OK packet to indicate server is alive.
+ */
+public class MilvusComPingExecutor implements CommandExecutor {
+
+  @Override
+  public Collection<DatabasePacket> execute() throws SQLException {
+    return Collections.singletonList(MySQLResponseBuilder.buildOKPacket(0));
+  }
 }

@@ -14,24 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-val testOutput = configurations.create("testOutput") {
-  extendsFrom(configurations.testRuntimeClasspath.get())
-  isCanBeConsumed = true
-  isCanBeResolved = false
-}
+package org.apache.calcite.adapter.milvus.sql.client.command;
 
-artifacts {
-  add("testOutput", sourceSets.test.get().java.destinationDirectory.get())
-}
+import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
-dependencies {
-    api(project(":core"))
-    api(project(":linq4j"))
+import java.sql.SQLException;
+import java.util.Collection;
 
-    implementation("io.milvus:milvus-sdk-java:2.5.13")
+/**
+ * Interface for MySQL command executors.
+ * Each command type has its own executor implementation.
+ */
+public interface CommandExecutor {
 
-    testImplementation(platform("org.junit:junit-bom:5.10.0"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testImplementation("org.testcontainers:testcontainers")
-    testImplementation(project(":testkit"))
+  /**
+   * Executes the command and returns response packets.
+   *
+   * @return collection of response packets
+   * @throws SQLException if execution fails
+   */
+  Collection<DatabasePacket> execute() throws SQLException;
 }
