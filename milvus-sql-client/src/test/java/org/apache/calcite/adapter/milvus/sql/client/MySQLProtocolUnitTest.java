@@ -52,7 +52,7 @@ public class MySQLProtocolUnitTest {
     Collection<DatabasePacket> packets = MySQLResponseBuilder.buildQueryResponse(result);
 
     // Verify packet structure
-    assertEquals(6, packets.size(), "Should have 6 packets: field_count + 2 col_defs + EOF + 1 row + OK");
+    assertEquals(6, packets.size(), "Should have 6 packets: field_count + 2 col_defs + EOF + 1 row + EOF");
 
     // Check packet types
     List<String> packetTypes = new ArrayList<>();
@@ -65,7 +65,7 @@ public class MySQLProtocolUnitTest {
     assertEquals("MySQLColumnDefinition41Packet", packetTypes.get(2));
     assertEquals("MySQLEofPacket", packetTypes.get(3), "EOF packet should be at index 3");
     assertEquals("MySQLTextResultSetRowPacket", packetTypes.get(4));
-    assertEquals("MySQLOKPacket", packetTypes.get(5));
+    assertEquals("MySQLEofPacket", packetTypes.get(5));
   }
 
   @Test
@@ -82,7 +82,7 @@ public class MySQLProtocolUnitTest {
     Collection<DatabasePacket> packets = MySQLResponseBuilder.buildQueryResponse(result);
 
     // Verify packet structure
-    assertEquals(4, packets.size(), "Should have 4 packets: field_count + 1 col_def + EOF + OK");
+    assertEquals(4, packets.size(), "Should have 4 packets: field_count + 1 col_def + EOF + EOF");
 
     // Check packet types
     List<String> packetTypes = new ArrayList<>();
@@ -93,7 +93,7 @@ public class MySQLProtocolUnitTest {
     assertEquals("MySQLFieldCountPacket", packetTypes.get(0));
     assertEquals("MySQLColumnDefinition41Packet", packetTypes.get(1));
     assertEquals("MySQLEofPacket", packetTypes.get(2), "EOF packet should be at index 2");
-    assertEquals("MySQLOKPacket", packetTypes.get(3));
+    assertEquals("MySQLEofPacket", packetTypes.get(3));
   }
 
   @Test

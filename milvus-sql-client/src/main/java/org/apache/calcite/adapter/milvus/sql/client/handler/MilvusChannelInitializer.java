@@ -19,10 +19,10 @@ package org.apache.calcite.adapter.milvus.sql.client.handler;
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
 
 import org.apache.shardingsphere.database.protocol.codec.PacketCodec;
-import org.apache.shardingsphere.database.protocol.codec.PacketCodec;
 import org.apache.shardingsphere.database.protocol.constant.CommonConstants;
 import org.apache.shardingsphere.database.protocol.mysql.codec.MySQLPacketCodecEngine;
 import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLConstants;
+import org.apache.shardingsphere.database.protocol.mysql.netty.MySQLSequenceIdInboundHandler;
 
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
@@ -55,6 +55,7 @@ public class MilvusChannelInitializer extends ChannelInitializer<SocketChannel> 
     ch.pipeline()
         // Layer 2: Protocol Layer - ShardingSphere MySQL codec
         .addLast(new PacketCodec(new MySQLPacketCodecEngine()))
+        .addLast(new MySQLSequenceIdInboundHandler(ch))
 
         // Layer 3: Authentication Layer
         .addLast(new MilvusAuthHandler(config))

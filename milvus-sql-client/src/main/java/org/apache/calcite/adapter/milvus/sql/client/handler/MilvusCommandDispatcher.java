@@ -75,20 +75,12 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
 
     ByteBuf buffer = (ByteBuf) msg;
     try {
-      // Reset sequence ID for each command (MySQL protocol requirement)
       ctx.channel().attr(org.apache.shardingsphere.database.protocol.mysql.constant.MySQLConstants.SEQUENCE_ID_ATTRIBUTE_KEY).set(new AtomicInteger());
 
-      // Skip sequence byte
-      buffer.skipBytes(1);
-
-      // Create payload and decode command
       MySQLPacketPayload payload = new MySQLPacketPayload(buffer,
           ctx.channel().attr(org.apache.shardingsphere.database.protocol.constant.CommonConstants.CHARSET_ATTRIBUTE_KEY).get());
 
-      // Read command type from first byte
       MySQLCommandPacketType commandType = MySQLCommandPacketType.valueOf(payload.readInt1());
-
-      // Create command packet based on type
       MySQLCommandPacket command = createCommandPacket(commandType, payload);
 
       // Debug logging

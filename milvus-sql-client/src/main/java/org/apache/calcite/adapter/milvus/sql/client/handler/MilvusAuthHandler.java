@@ -97,13 +97,7 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
    */
   private void processHandshakeResponse(ChannelHandlerContext ctx, ByteBuf buffer) {
     try {
-      // Skip sequence byte (first byte)
-      buffer.skipBytes(1);
-
-      // Create payload from buffer with UTF-8 charset
       MySQLPacketPayload payload = new MySQLPacketPayload(buffer, StandardCharsets.UTF_8);
-
-      // Parse handshake response
       MySQLHandshakeResponse41Packet response = new MySQLHandshakeResponse41Packet(payload);
 
       // Create connection session and store in channel attribute

@@ -49,7 +49,7 @@ public final class MySQLResponseBuilder {
 
   /**
    * Builds a query response from SQL execution result.
-   * Returns: field count + column definitions + EOF + rows + OK packet
+   * Returns: field count + column definitions + EOF + rows + EOF packet
    */
   public static Collection<DatabasePacket> buildQueryResponse(SQLExecutor.QueryResult result) {
     List<DatabasePacket> packets = new ArrayList<>();
@@ -81,8 +81,8 @@ public final class MySQLResponseBuilder {
       packets.add(new MySQLTextResultSetRowPacket(safeRow));
     }
 
-    // 5. Final OK packet
-    packets.add(new MySQLOKPacket(0, 0, SERVER_STATUS_AUTOCOMMIT));
+    // 5. Final EOF packet
+    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
 
     System.err.println("[RESPONSE] Built query response:");
     System.err.println("[RESPONSE]   Columns: " + result.getColumns().size());
