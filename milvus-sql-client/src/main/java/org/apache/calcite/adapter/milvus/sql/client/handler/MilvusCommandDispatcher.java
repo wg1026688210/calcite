@@ -54,11 +54,9 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
   public static final AttributeKey<ConnectionSession> SESSION_KEY =
       AttributeKey.valueOf("milvus.session");
 
-  private final MilvusServerConfig config;
   private final SQLExecutor sqlExecutor;
 
   public MilvusCommandDispatcher(MilvusServerConfig config) {
-    this.config = config;
     this.sqlExecutor = new SQLExecutor(
         config.getMilvusHost(),
         config.getMilvusPort(),
@@ -67,7 +65,7 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
   }
 
   @Override
-  public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+  public void channelRead(ChannelHandlerContext ctx, Object msg) {
     if (!(msg instanceof ByteBuf)) {
       ctx.fireChannelRead(msg);
       return;

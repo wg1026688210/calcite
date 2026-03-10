@@ -59,7 +59,7 @@ public class SQLExecutor {
       }
     }
     String upperSql = trimmedSql.toUpperCase();
-    if (upperSql.startsWith("SET ")) {
+    if (upperSql.startsWith("SET ") || upperSql.startsWith("USE ")) {
       return new QueryResult(new ArrayList<>(), new ArrayList<>(), 0);
     }
     // Return empty result set for system queries (with proper column definitions)
@@ -67,7 +67,6 @@ public class SQLExecutor {
       List<ColumnInfo> columns = new ArrayList<>();
       columns.add(new ColumnInfo("Variable_name", Types.VARCHAR, "VARCHAR"));
       columns.add(new ColumnInfo("Value", Types.VARCHAR, "VARCHAR"));
-      // Return some fake variables for MySQL 5.1 compatibility
       List<List<Object>> rows = new ArrayList<>();
       rows.add(Arrays.asList("character_set_client", "utf8"));
       rows.add(Arrays.asList("character_set_connection", "utf8"));
@@ -75,11 +74,22 @@ public class SQLExecutor {
       rows.add(Arrays.asList("character_set_server", "utf8"));
       rows.add(Arrays.asList("time_zone", "UTC"));
       rows.add(Arrays.asList("system_time_zone", "UTC"));
+      rows.add(Arrays.asList("max_allowed_packet", "16777216"));
+      rows.add(Arrays.asList("net_buffer_length", "16384"));
+      rows.add(Arrays.asList("sql_mode", "STRICT_TRANS_TABLES"));
+      rows.add(Arrays.asList("lower_case_table_names", "0"));
+      rows.add(Arrays.asList("wait_timeout", "28800"));
+      rows.add(Arrays.asList("interactive_timeout", "28800"));
+      rows.add(Arrays.asList("auto_increment_increment", "1"));
       return new QueryResult(columns, rows, 0);
     }
+    if (upperSql.startsWith("SELECT @@SESSION.")) {
+      return buildSessionVariableResult(trimmedSql, "@@session.");
+    }
+    if (upperSql.startsWith("SELECT @@GLOBAL.")) {
+      return buildSessionVariableResult(trimmedSql, "@@global.");
+    }
     if (upperSql.startsWith("SHOW SESSION STATUS") ||
-        upperSql.startsWith("SELECT @@SESSION.") ||
-        upperSql.startsWith("SELECT @@GLOBAL.") ||
         upperSql.startsWith("SHOW COLLATION") ||
         upperSql.startsWith("SHOW CHARACTER SET") ||
         upperSql.startsWith("SHOW DATABASES") ||
@@ -149,6 +159,46 @@ public class SQLExecutor {
       rows.add(row);
     }
 
+    return new QueryResult(columns, rows, 0);
+  }
+
+  private QueryResult buildSessionVariableResult(String sql, String prefix) {
+    String normalized = sql.trim().replace("`", "");
+    String lower = normalized.toLowerCase();
+    int start = lower.indexOf(prefix);
+    String variable = start >= 0 ? normalized.substring(start + prefix.length()).trim() : normalized;
+    int end = variable.indexOf(',');
+    if (end >= 0) {
+      variable = variable.substring(0, end).trim();
+    }
+    end = variable.indexOf(' ');
+    if (end >= 0) {
+      variable = variable.substring(0, end).trim();
+    }
+
+    String value;
+    switch (variable.toLowerCase()) {
+      case "auto_increment_increment":
+        value = "1";
+        break;
+      case "max_allowed_packet":
+        value = "16777216";
+        break;
+      case "net_buffer_length":
+        value = "16384";
+        break;
+      case "sql_mode":
+        value = "STRICT_TRANS_TABLES";
+        break;
+      default:
+        value = "0";
+        break;
+    }
+
+    List<ColumnInfo> columns = new ArrayList<>();
+    columns.add(new ColumnInfo(variable, Types.VARCHAR, "VARCHAR"));
+    List<List<Object>> rows = new ArrayList<>();
+    rows.add(Arrays.asList(value));
     return new QueryResult(columns, rows, 0);
   }
 
