@@ -220,7 +220,10 @@ public class RawSocketTest extends MilvusBaseE2ETest {
     }
 
     // Username
-    baos.writeBytes("root".getBytes(StandardCharsets.UTF_8));
+    byte[] usernameBytes = "root".getBytes(StandardCharsets.UTF_8);
+    for (byte b : usernameBytes) {
+      baos.write(b);
+    }
     baos.write(0x00);  // null terminator
 
     // Auth response (empty for now)

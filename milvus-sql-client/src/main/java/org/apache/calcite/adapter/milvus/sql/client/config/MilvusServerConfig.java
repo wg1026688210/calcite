@@ -89,4 +89,26 @@ public class MilvusServerConfig {
   public void setMilvusPassword(String milvusPassword) {
     this.milvusPassword = milvusPassword;
   }
+
+  // SSL configuration (auto-generated self-signed certificate, zero config)
+  private boolean sslEnabled = false;
+
+  // Auth plugin configuration
+  private String authPlugin = "mysql_native_password";
+
+  public boolean isSslEnabled() {
+    return sslEnabled;
+  }
+
+  public void setSslEnabled(boolean sslEnabled) {
+    this.sslEnabled = sslEnabled;
+  }
+
+  public String getAuthPlugin() {
+    return authPlugin;
+  }
+
+  public void setAuthPlugin(String authPlugin) {
+    this.authPlugin = authPlugin;
+  }
 }

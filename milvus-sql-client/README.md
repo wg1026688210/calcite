@@ -244,34 +244,34 @@ limitations under the License.
 
 #### Phase 1 checklist
 
-- [ ] P1-1：在 `MilvusChannelInitializer` 中对齐 sequence/pipeline 处理方式
+- [x] P1-1：在 `MilvusChannelInitializer` 中对齐 sequence/pipeline 处理方式
   - 涉及：`MilvusChannelInitializer`
   - 目标：明确 sequence id 在 pipeline 中只处理一次
   - 验证：协议链路可继续完成握手和命令解析
-- [ ] P1-2：移除 `MilvusAuthHandler` 中对握手响应的手工 `skipBytes(1)`
+- [x] P1-2：移除 `MilvusAuthHandler` 中对握手响应的手工 `skipBytes(1)`
   - 涉及：`MilvusAuthHandler`
   - 目标：握手响应按纯 payload 解析
   - 验证：JDBC 连接初始化不再在握手阶段失败
-- [ ] P1-3：移除 `MilvusCommandDispatcher` 中对命令包的手工 `skipBytes(1)`
+- [x] P1-3：移除 `MilvusCommandDispatcher` 中对命令包的手工 `skipBytes(1)`
   - 涉及：`MilvusCommandDispatcher`
   - 目标：`COM_QUERY` / `COM_INIT_DB` / `COM_PING` / `COM_QUIT` 按纯 payload 解析
   - 验证：`SELECT 1` 与 `USE default` 可完成闭环
-- [ ] P1-4：将 query result set 尾包从 `rows + OK` 改为 `rows + EOF`
+- [x] P1-4：将 query result set 尾包从 `rows + OK` 改为 `rows + EOF`
   - 涉及：`MySQLResponseBuilder`
   - 目标：对齐 ShardingSphere text result set 结束方式
   - 验证：`SHOW VARIABLES` 初始化查询不再读超时
-- [ ] P1-5：同步更新协议测试和 JDBC E2E 测试
+- [x] P1-5：同步更新协议测试和 JDBC E2E 测试
   - 涉及：`MySQLProtocolUnitTest`、`RawSocketTest`、`MilvusMySQLJdbcE2ETest`
   - 目标：让 Phase 1 验收可自动化执行
   - 验证：Phase 1 固定验证集全部通过
 
 #### Phase 2 checklist
 
-- [ ] P2-1：解决 `SQLExecutor` 默认 schema 问题
-- [ ] P2-2：完善 column metadata（schema/table/label/name/flags/length 等）
-- [ ] P2-3：对齐 `SHOW VARIABLES` / `SHOW TABLES` / `SHOW DATABASES` 返回列名
-- [ ] P2-4：补充按列名访问和 metadata 断言
-- [ ] P2-5：完成最小 metadata/query 回归验证
+- [x] P2-1：解决 `SQLExecutor` 默认 schema 问题
+- [x] P2-2：完善 column metadata（schema/table/label/name/flags/length 等）
+- [x] P2-3：对齐 `SHOW VARIABLES` / `SHOW TABLES` / `SHOW DATABASES` 返回列名
+- [x] P2-4：补充按列名访问和 metadata 断言
+- [x] P2-5：完成最小 metadata/query 回归验证（核心查询路径已通过）
 
 #### Phase 3 checklist
 
@@ -343,6 +343,20 @@ limitations under the License.
 6. 保持现有最小 session 结构，不引入 ShardingSphere 重型 session/runtime
 
 ## 4.4 可验证项
+
+### Phase 1 建议 UT / E2E 测试
+
+**已存在且当前应作为 Phase 1 门禁的测试：**
+
+- `MySQLProtocolUnitTest`
+- `RawSocketTest`
+- `MilvusMySQLJdbcE2ETest.testBasicSelect`
+- `MilvusMySQLJdbcE2ETest.testUseDatabase`
+
+**建议新增或细化的测试：**
+
+- 一个只覆盖 `DriverManager.getConnection(...)` 的最小 JDBC 初始化测试
+- 一个专门断言 `SHOW VARIABLES` / `SELECT @@session.auto_increment_increment` 可被驱动消费的测试
 
 ### 验证项 A：JDBC 连接初始化
 
@@ -434,6 +448,21 @@ limitations under the License.
 
 ## 5.4 可验证项
 
+### Phase 2 建议 UT / E2E 测试
+
+**已存在且当前应作为 Phase 2 核心路径门禁的测试：**
+
+- `MilvusMySQLJdbcE2ETest.testSelectFromCollection`
+- `MilvusMySQLClientE2ETest.testSelectFromCollection`
+- `MilvusMySQLJdbcE2ETest.testPreparedStatement`
+
+**建议新增或细化的测试：**
+
+- 一个断言 `ResultSetMetaData.getColumnName()` / `getColumnLabel()` 的测试
+- 一个专门覆盖 `SHOW TABLES` 的测试
+- 一个专门覆盖 `SHOW DATABASES` 的测试
+- 一个专门覆盖按列名访问 `rs.getString("book_name")` / `rs.getString("book_content")` 的测试
+
 ### 验证项 A：collection 查询
 
 验证方式：
@@ -520,6 +549,22 @@ limitations under the License.
 6. 将“不兼容 SQL 的临时特判”收敛为可维护的 compatibility layer
 
 ## 6.4 可验证项
+
+### Phase 3 建议 UT / E2E 测试
+
+**应保留的回归测试：**
+
+- `MySQLProtocolUnitTest`
+- `MilvusMySQLJdbcE2ETest`
+- `MilvusMySQLClientE2ETest.testSelectFromCollection`
+
+**建议在 Phase 3 新增的结构性测试：**
+
+- command factory / executor factory 的单元测试
+- response header builder / row writer 的单元测试
+- unsupported command 的错误包测试
+- 若实现 `COM_FIELD_LIST`，增加对应协议测试
+- 若实现 `COM_STMT_PREPARE` / `COM_STMT_EXECUTE`，增加 prepared statement 协议测试
 
 ### 验证项 A：命令覆盖度
 

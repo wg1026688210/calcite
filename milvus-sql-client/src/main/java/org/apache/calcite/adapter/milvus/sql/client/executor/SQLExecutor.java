@@ -16,7 +16,6 @@
  */
 package org.apache.calcite.adapter.milvus.sql.client.executor;
 
-import org.apache.calcite.adapter.milvus.factory.MilvusSchema;
 import org.apache.calcite.adapter.milvus.factory.MilvusSchemaFactory;
 import org.apache.calcite.adapter.milvus.hint.MilvusPrepareImpl;
 import org.apache.calcite.jdbc.CalciteConnection;
@@ -89,12 +88,19 @@ public class SQLExecutor {
     if (upperSql.startsWith("SELECT @@GLOBAL.")) {
       return buildSessionVariableResult(trimmedSql, "@@global.");
     }
+    if (upperSql.startsWith("SHOW DATABASES") || upperSql.startsWith("SHOW SCHEMAS")) {
+      List<ColumnInfo> columns = new ArrayList<>();
+      columns.add(new ColumnInfo("Database", Types.VARCHAR, "VARCHAR"));
+      List<List<Object>> rows = new ArrayList<>();
+      rows.add(Arrays.asList(milvusDatabase));
+      return new QueryResult(columns, rows, 0);
+    }
+    if (upperSql.startsWith("SHOW TABLES")) {
+      return buildShowTablesResult();
+    }
     if (upperSql.startsWith("SHOW SESSION STATUS") ||
         upperSql.startsWith("SHOW COLLATION") ||
-        upperSql.startsWith("SHOW CHARACTER SET") ||
-        upperSql.startsWith("SHOW DATABASES") ||
-        upperSql.startsWith("SHOW SCHEMAS") ||
-        upperSql.startsWith("SHOW TABLES")) {
+        upperSql.startsWith("SHOW CHARACTER SET")) {
       List<ColumnInfo> columns = new ArrayList<>();
       columns.add(new ColumnInfo("Variable_name", Types.VARCHAR, "VARCHAR"));
       columns.add(new ColumnInfo("Value", Types.VARCHAR, "VARCHAR"));
@@ -125,16 +131,21 @@ public class SQLExecutor {
     CalciteConnection calciteConnection = connection.unwrap(CalciteConnection.class);
     SchemaPlus rootSchema = calciteConnection.getRootSchema();
 
+    Schema milvusSchema = createMilvusSchema(rootSchema);
+    rootSchema.add("milvus", milvusSchema);
+    calciteConnection.setSchema("milvus");
+
+    return connection;
+  }
+
+  private Schema createMilvusSchema(SchemaPlus rootSchema) {
     Map<String, Object> operands = new HashMap<>();
     operands.put("host", milvusHost);
     operands.put("port", milvusPort);
     operands.put("databaseName", milvusDatabase);
 
     MilvusSchemaFactory schemaFactory = new MilvusSchemaFactory();
-    Schema milvusSchema = schemaFactory.create(rootSchema, "milvus", operands);
-    rootSchema.add("milvus", milvusSchema);
-
-    return connection;
+    return schemaFactory.create(rootSchema, "milvus", operands);
   }
 
   private QueryResult convertResultSet(ResultSet rs) throws SQLException {
@@ -145,8 +156,13 @@ public class SQLExecutor {
     for (int i = 1; i <= columnCount; i++) {
       columns.add(new ColumnInfo(
           metaData.getColumnName(i),
+          metaData.getColumnLabel(i),
+          metaData.getSchemaName(i),
+          metaData.getTableName(i),
           metaData.getColumnType(i),
-          metaData.getColumnTypeName(i)
+          metaData.getColumnTypeName(i),
+          metaData.getColumnDisplaySize(i),
+          metaData.getScale(i)
       ));
     }
 
@@ -202,19 +218,67 @@ public class SQLExecutor {
     return new QueryResult(columns, rows, 0);
   }
 
+  private QueryResult buildShowTablesResult() throws SQLException {
+    List<ColumnInfo> columns = new ArrayList<>();
+    columns.add(new ColumnInfo("Tables_in_" + milvusDatabase, Types.VARCHAR, "VARCHAR"));
+    List<List<Object>> rows = new ArrayList<>();
+
+    final Driver driver = new Driver().withPrepareFactory(MilvusPrepareImpl::new);
+    Properties info = new Properties();
+    info.setProperty("lex", "JAVA");
+    info.setProperty("fun", "milvus");
+    info.setProperty("defaultCharset", "UTF-8");
+    try (Connection connection = driver.connect("jdbc:calcite:", info)) {
+      CalciteConnection calciteConnection = connection.unwrap(CalciteConnection.class);
+      SchemaPlus rootSchema = calciteConnection.getRootSchema();
+      Schema milvusSchema = createMilvusSchema(rootSchema);
+      for (String tableName : milvusSchema.getTableNames()) {
+        rows.add(Arrays.asList(tableName));
+      }
+    }
+    return new QueryResult(columns, rows, 0);
+  }
+
   public static class ColumnInfo {
     private final String name;
+    private final String label;
+    private final String schemaName;
+    private final String tableName;
     private final int sqlType;
     private final String typeName;
+    private final int displaySize;
+    private final int decimals;
 
     public ColumnInfo(String name, int sqlType, String typeName) {
+      this(name, name, "def", "", sqlType, typeName, 255, 0);
+    }
+
+    public ColumnInfo(String name, String label, String schemaName, String tableName,
+        int sqlType, String typeName, int displaySize, int decimals) {
       this.name = name;
+      this.label = label;
+      this.schemaName = schemaName == null || schemaName.isEmpty() ? "def" : schemaName;
+      this.tableName = tableName == null ? "" : tableName;
       this.sqlType = sqlType;
       this.typeName = typeName;
+      this.displaySize = displaySize > 0 ? displaySize : 255;
+      this.decimals = Math.max(decimals, 0);
     }
 
     public String getName() {
       return name;
+    }
+
+    public String getLabel() {
+      return label;
+    }
+
+    public String getSchemaName() {
+      return schemaName;
+    }
+
+    public String getTableName() {
+      return tableName;
     }
 
     public int getSqlType() {
@@ -223,6 +287,14 @@ public class SQLExecutor {
 
     public String getTypeName() {
       return typeName;
+    }
+
+    public int getDisplaySize() {
+      return displaySize;
+    }
+
+    public int getDecimals() {
+      return decimals;
     }
   }
 

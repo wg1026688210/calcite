@@ -20,6 +20,7 @@ import org.apache.calcite.adapter.milvus.MilvusBaseE2ETest;
 import org.apache.calcite.adapter.milvus.extension.MilvusExtension;
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
 import org.apache.calcite.adapter.milvus.sql.client.server.MilvusMySQLServer;
+import org.apache.calcite.adapter.milvus.util.CommonData;
 import org.apache.calcite.adapter.milvus.util.TestEnvUtil;
 
 import org.junit.jupiter.api.AfterAll;
@@ -35,6 +36,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -99,15 +101,22 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
 
   @Test
   void testSelectFromCollection() throws Exception {
+    System.out.println("Testing SELECT from collection: " + TEST_COLLECTION);
     try (Statement stmt = jdbcConnection.createStatement();
          ResultSet rs = stmt.executeQuery(
-             "SELECT book_name, book_content FROM " + TEST_COLLECTION + " LIMIT 10")) {
+             "SELECT book_name, book_content , "+ CommonData.defaultVectorField+" FROM " + TEST_COLLECTION + " LIMIT 10")) {
+
+      Assertions.assertEquals("book_name", rs.getMetaData().getColumnName(1));
+      Assertions.assertEquals("book_name", rs.getMetaData().getColumnLabel(1));
+      Assertions.assertEquals("book_content", rs.getMetaData().getColumnName(2));
+      Assertions.assertEquals("book_content", rs.getMetaData().getColumnLabel(2));
 
       List<String> results = new ArrayList<>();
       while (rs.next()) {
-        results.add(rs.getString("book_name") + ":" + rs.getString("book_content"));
+        results.add(rs.getString("book_name") + ":" + rs.getString("book_content")+":"+rs.getString(CommonData.defaultVectorField));
       }
-
+      System.out.println(1111);
+      System.out.println(results);
       Assertions.assertFalse(results.isEmpty(), "Should have results from collection");
     }
   }
@@ -130,6 +139,45 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
       // USE command should return OK
       boolean result = stmt.execute("USE default");
       Assertions.assertFalse(result, "USE should not return result set");
+    }
+  }
+
+  @Test
+  void testShowTables() throws Exception {
+    try (Statement stmt = jdbcConnection.createStatement();
+         ResultSet rs = stmt.executeQuery("SHOW TABLES")) {
+      Assertions.assertEquals("Tables_in_default", rs.getMetaData().getColumnLabel(1));
+      List<String> tables = new ArrayList<>();
+      while (rs.next()) {
+        tables.add(rs.getString(1));
+      }
+      Assertions.assertTrue(tables.contains(TEST_COLLECTION), "SHOW TABLES should include the test collection");
+    }
+  }
+
+  @Test
+  void testShowDatabases() throws Exception {
+    try (Statement stmt = jdbcConnection.createStatement();
+         ResultSet rs = stmt.executeQuery("SHOW DATABASES")) {
+      Assertions.assertEquals("Database", rs.getMetaData().getColumnLabel(1));
+      List<String> databases = new ArrayList<>();
+      while (rs.next()) {
+        databases.add(rs.getString(1));
+      }
+      Assertions.assertTrue(databases.contains("default"), "SHOW DATABASES should include default");
+    }
+  }
+
+  @Test
+  void testCollectionMetadata() throws Exception {
+    try (Statement stmt = jdbcConnection.createStatement();
+         ResultSet rs = stmt.executeQuery(
+             "SELECT book_name, book_content FROM " + TEST_COLLECTION + " LIMIT 1")) {
+      Assertions.assertEquals(TEST_COLLECTION, rs.getMetaData().getTableName(1));
+      Assertions.assertTrue(rs.getMetaData().getColumnDisplaySize(1) > 0);
+      Assertions.assertEquals("VARCHAR", rs.getMetaData().getColumnTypeName(1).toUpperCase());
+      Assertions.assertEquals(TEST_COLLECTION, rs.getMetaData().getTableName(2));
+      Assertions.assertEquals("VARCHAR", rs.getMetaData().getColumnTypeName(2).toUpperCase());
     }
   }
 

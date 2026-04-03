@@ -132,18 +132,23 @@ public final class MySQLResponseBuilder {
    */
   private static DatabasePacket createColumnDefinitionPacket(SQLExecutor.ColumnInfo column) {
     MySQLBinaryColumnType columnType = mapSqlTypeToMySQLType(column.getSqlType());
+    String schemaName = column.getSchemaName() == null || column.getSchemaName().isEmpty()
+        ? "def" : column.getSchemaName();
+    String tableName = column.getTableName() == null ? "" : column.getTableName();
+    String columnLabel = column.getLabel() == null || column.getLabel().isEmpty()
+        ? column.getName() : column.getLabel();
 
     return new MySQLColumnDefinition41Packet(
-        CHARSET_UTF8MB4,                 // characterSet
-        SCHEMA_DEF,                      // schema
-        "",                              // table
-        "",                              // orgTable
-        column.getName(),                // name
-        column.getName(),                // orgName
-        255,                             // columnLength
-        columnType,                      // columnType
-        0,                               // decimals
-        false                            // containDefaultValues
+        CHARSET_UTF8MB4,
+        schemaName,
+        tableName,
+        tableName,
+        columnLabel,
+        column.getName(),
+        column.getDisplaySize(),
+        columnType,
+        column.getDecimals(),
+        false
     );
   }
 

@@ -40,8 +40,13 @@ dependencies {
     // ShardingSphere: only protocol layer, no proxy-frontend
     implementation("org.apache.shardingsphere:shardingsphere-protocol-mysql:$shardingsphereVersion")
     implementation("org.apache.shardingsphere:shardingsphere-database-protocol-core:$shardingsphereVersion")
+    implementation("org.apache.shardingsphere:shardingsphere-proxy-frontend-mysql:$shardingsphereVersion")
+
 
     implementation("org.slf4j:slf4j-api")
+
+    // BouncyCastle for auto SSL certificate generation (like ShardingSphere)
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78")
 
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
