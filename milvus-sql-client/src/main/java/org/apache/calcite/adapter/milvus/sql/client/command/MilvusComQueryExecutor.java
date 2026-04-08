@@ -45,6 +45,11 @@ public class MilvusComQueryExecutor implements CommandExecutor {
 
   @Override
   public Collection<DatabasePacket> execute() throws SQLException {
+    // Handle system variable queries (@@variable) for MySQL 8.0+ JDBC compatibility
+    if (SystemVariableHandler.isSystemVariableQuery(sql)) {
+      return SystemVariableHandler.handle(sql);
+    }
+
     SQLExecutor.QueryResult result = sqlExecutor.execute(sql);
     return MySQLResponseBuilder.buildQueryResponse(result);
   }

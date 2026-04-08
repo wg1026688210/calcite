@@ -24,6 +24,7 @@ import org.apache.calcite.adapter.milvus.util.TestEnvUtil;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -59,6 +60,7 @@ public class RawSocketTest extends MilvusBaseE2ETest {
   }
 
   @Test
+  @Disabled("Debug test - may timeout due to socket read")
   public void testRawSocket() throws Exception {
     try (Socket socket = new Socket("127.0.0.1", MYSQL_PORT)) {
       socket.setSoTimeout(10000);

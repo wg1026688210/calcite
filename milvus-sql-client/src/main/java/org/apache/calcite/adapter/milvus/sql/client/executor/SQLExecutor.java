@@ -60,7 +60,7 @@ public class SQLExecutor {
     String upperSql = trimmedSql.toUpperCase();
     if (upperSql.startsWith("SET ") || upperSql.startsWith("USE ")) {
       return new QueryResult(new ArrayList<>(), new ArrayList<>(), 0);
-    }
+  }
     // Return empty result set for system queries (with proper column definitions)
     if (upperSql.startsWith("SHOW VARIABLES")) {
       List<ColumnInfo> columns = new ArrayList<>();

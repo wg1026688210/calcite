@@ -72,6 +72,12 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
     }
 
     ByteBuf buffer = (ByteBuf) msg;
+
+    // Defensive: skip empty buffers (can happen during SSL handshake)
+    if (buffer.readableBytes() == 0) {
+      buffer.release();
+      return;
+    }
     try {
       ctx.channel().attr(org.apache.shardingsphere.database.protocol.mysql.constant.MySQLConstants.SEQUENCE_ID_ATTRIBUTE_KEY).set(new AtomicInteger());
 

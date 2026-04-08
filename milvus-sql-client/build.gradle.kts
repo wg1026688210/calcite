@@ -28,6 +28,11 @@ tasks.withType<JavaCompile> {
   options.compilerArgs.addAll(listOf("-Xlint:-deprecation", "-Xlint:-options"))
 }
 
+tasks.test {
+  // Pass mysql.driver.version to tests for version-conditional SSL tests
+  systemProperty("mysql.driver.version", rootProject.extra["mysql-connector-java.version"])
+}
+
 dependencies {
     api(project(":milvus"))
     api(project(":core"))

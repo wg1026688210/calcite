@@ -195,4 +195,64 @@ public final class MySQLResponseBuilder {
         return MySQLBinaryColumnType.VARCHAR;
     }
   }
+
+  /**
+   * Builds response for variable query (SELECT @@variable).
+   */
+  public static Collection<DatabasePacket> buildVariableQueryResponse(
+      java.util.Map<String, String> variables) {
+    List<DatabasePacket> packets = new ArrayList<>();
+
+    // Single column result with variable value
+    packets.add(new MySQLFieldCountPacket(1));
+    packets.add(new MySQLColumnDefinition41Packet(
+        CHARSET_UTF8MB4, SCHEMA_DEF, "", "",
+        "@@variable", "@@variable", 255,
+        MySQLBinaryColumnType.VARCHAR, 0, false));
+    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
+
+    // Add row with concatenated values if multiple variables
+    StringBuilder value = new StringBuilder();
+    for (String v : variables.values()) {
+      if (value.length() > 0) value.append(",");
+      value.append(v);
+    }
+    List<Object> row = new ArrayList<>();
+    row.add(value.toString());
+    packets.add(new MySQLTextResultSetRowPacket(row));
+
+    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
+    return packets;
+  }
+
+  /**
+   * Builds response for SHOW VARIABLES query.
+   */
+  public static Collection<DatabasePacket> buildShowVariablesResponse(
+      java.util.Map<String, String> variables) {
+    List<DatabasePacket> packets = new ArrayList<>();
+
+    // Two columns: Variable_name, Value
+    packets.add(new MySQLFieldCountPacket(2));
+    packets.add(new MySQLColumnDefinition41Packet(
+        CHARSET_UTF8MB4, SCHEMA_DEF, "", "",
+        "Variable_name", "Variable_name", 64,
+        MySQLBinaryColumnType.VARCHAR, 0, false));
+    packets.add(new MySQLColumnDefinition41Packet(
+        CHARSET_UTF8MB4, SCHEMA_DEF, "", "",
+        "Value", "Value", 255,
+        MySQLBinaryColumnType.VARCHAR, 0, false));
+    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
+
+    // Add rows
+    for (java.util.Map.Entry<String, String> entry : variables.entrySet()) {
+      List<Object> row = new ArrayList<>();
+      row.add(entry.getKey());
+      row.add(entry.getValue());
+      packets.add(new MySQLTextResultSetRowPacket(row));
+    }
+
+    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
+    return packets;
+  }
 }
