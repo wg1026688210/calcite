@@ -37,6 +37,8 @@ dependencies {
     api(project(":milvus"))
     api(project(":core"))
 
+    implementation("io.milvus:milvus-sdk-java:2.5.13")
+
     implementation("io.netty:netty-common:$nettyVersion")
     implementation("io.netty:netty-transport:$nettyVersion")
     implementation("io.netty:netty-handler:$nettyVersion")

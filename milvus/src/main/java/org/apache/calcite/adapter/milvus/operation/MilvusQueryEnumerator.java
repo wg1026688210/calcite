@@ -36,15 +36,18 @@ public class MilvusQueryEnumerator implements Enumerator<Object> {
   private final Iterator<Row> iterator;
   private Object current;
 
+  private MilvusSchema milvusSchema;
+
   public MilvusQueryEnumerator(
-      MilvusSchema schema,
-      String collectionName,
-      @Nullable String filterExpression,
-      @Nullable List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMapForEnumerator) {
-    this.client = schema.createClient();
+          MilvusSchema schema,
+          String collectionName,
+          @Nullable String filterExpression,
+          @Nullable List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMapForEnumerator) {
+    this.milvusSchema = schema;
+    this.client = schema.borrowClient();
     this.iterator =
-        createIterator(this.client, collectionName, filterExpression, DEFAULT_PAGINATION_SIZE,
-            projectRowTypeMapForEnumerator);
+            createIterator(this.client, collectionName, filterExpression, DEFAULT_PAGINATION_SIZE,
+                    projectRowTypeMapForEnumerator);
     this.current = null;
   }
 
@@ -87,7 +90,7 @@ public class MilvusQueryEnumerator implements Enumerator<Object> {
 
   @Override public void close() {
     try {
-      client.close();
+      this.milvusSchema.returnClient(this.client);
     } catch (Exception ignore) {
       // ignore
     }

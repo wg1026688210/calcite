@@ -25,6 +25,7 @@ import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.Collections;
 
 /**
  * Executor for MySQL COM_QUERY commands (SQL queries).
@@ -45,12 +46,32 @@ public class MilvusComQueryExecutor implements CommandExecutor {
 
   @Override
   public Collection<DatabasePacket> execute() throws SQLException {
+    String trimmedSql = sql.trim();
+
     // Handle system variable queries (@@variable) for MySQL 8.0+ JDBC compatibility
-    if (SystemVariableHandler.isSystemVariableQuery(sql)) {
-      return SystemVariableHandler.handle(sql);
+    if (SystemVariableHandler.isSystemVariableQuery(trimmedSql)) {
+      return SystemVariableHandler.handle(trimmedSql);
     }
 
-    SQLExecutor.QueryResult result = sqlExecutor.execute(sql);
+    // Handle USE database command (MySQL JDBC sends it as COM_QUERY)
+    String upperSql = trimmedSql.toUpperCase();
+    if (upperSql.startsWith("USE ")) {
+      String dbName = trimmedSql.substring(4).trim().replace(";", "").replace("`", "");
+      // Validate database exists
+      if (!sqlExecutor.databaseExists(dbName)) {
+        return Collections.singletonList(
+            MySQLResponseBuilder.buildErrorPacket(
+                "Unknown database '" + dbName + "'", 1049, "42000"));
+      }
+      if (session != null) {
+        session.setCurrentDatabase(dbName);
+      }
+      return Collections.singletonList(MySQLResponseBuilder.buildOKPacket(0));
+    }
+
+    // Use session's current database for execution
+    String currentDb = session != null ? session.getCurrentDatabase() : null;
+    SQLExecutor.QueryResult result = sqlExecutor.execute(sql, currentDb);
     return MySQLResponseBuilder.buildQueryResponse(result);
   }
 }

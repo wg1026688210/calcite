@@ -16,11 +16,10 @@
  */
 package org.apache.calcite.adapter.milvus.sql.client.executor;
 
-import org.apache.calcite.adapter.milvus.factory.MilvusSchemaFactory;
+import org.apache.calcite.adapter.milvus.factory.MilvusSchema;
 import org.apache.calcite.adapter.milvus.hint.MilvusPrepareImpl;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.jdbc.Driver;
-import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaPlus;
 
 import java.sql.Connection;
@@ -31,23 +30,33 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 public class SQLExecutor {
   private final String milvusHost;
   private final int milvusPort;
   private final String milvusDatabase;
+  private final String milvusUsername;
+  private final String milvusPassword;
 
-  public SQLExecutor(String milvusHost, int milvusPort, String milvusDatabase) {
+  public SQLExecutor(String milvusHost, int milvusPort, String milvusDatabase,
+      String milvusUsername, String milvusPassword) {
     this.milvusHost = milvusHost;
     this.milvusPort = milvusPort;
     this.milvusDatabase = milvusDatabase;
+    this.milvusUsername = milvusUsername;
+    this.milvusPassword = milvusPassword;
   }
 
   public QueryResult execute(String sql) throws SQLException {
+    return execute(sql, milvusDatabase);
+  }
+
+  /**
+   * Executes SQL with specified database context.
+   */
+  public QueryResult execute(String sql, String currentDatabase) throws SQLException {
     // Handle JDBC driver initialization queries that Calcite doesn't support
     String trimmedSql = sql.trim();
     // Remove leading comments like /* ... */
@@ -58,9 +67,13 @@ public class SQLExecutor {
       }
     }
     String upperSql = trimmedSql.toUpperCase();
-    if (upperSql.startsWith("SET ") || upperSql.startsWith("USE ")) {
+    if (upperSql.startsWith("SET ")) {
       return new QueryResult(new ArrayList<>(), new ArrayList<>(), 0);
-  }
+    }
+    // Handle USE database command
+    if (upperSql.startsWith("USE ")) {
+      return new QueryResult(new ArrayList<>(), new ArrayList<>(), 0);
+    }
     // Return empty result set for system queries (with proper column definitions)
     if (upperSql.startsWith("SHOW VARIABLES")) {
       List<ColumnInfo> columns = new ArrayList<>();
@@ -89,14 +102,10 @@ public class SQLExecutor {
       return buildSessionVariableResult(trimmedSql, "@@global.");
     }
     if (upperSql.startsWith("SHOW DATABASES") || upperSql.startsWith("SHOW SCHEMAS")) {
-      List<ColumnInfo> columns = new ArrayList<>();
-      columns.add(new ColumnInfo("Database", Types.VARCHAR, "VARCHAR"));
-      List<List<Object>> rows = new ArrayList<>();
-      rows.add(Arrays.asList(milvusDatabase));
-      return new QueryResult(columns, rows, 0);
+      return buildShowDatabasesResult();
     }
     if (upperSql.startsWith("SHOW TABLES")) {
-      return buildShowTablesResult();
+      return buildShowTablesResult(currentDatabase);
     }
     if (upperSql.startsWith("SHOW SESSION STATUS") ||
         upperSql.startsWith("SHOW COLLATION") ||
@@ -107,7 +116,7 @@ public class SQLExecutor {
       return new QueryResult(columns, new ArrayList<>(), 0);
     }
 
-    try (Connection connection = createConnection()) {
+    try (Connection connection = createConnection(currentDatabase)) {
       try (Statement statement = connection.createStatement()) {
         if (statement.execute(sql)) {
           ResultSet rs = statement.getResultSet();
@@ -120,7 +129,7 @@ public class SQLExecutor {
     }
   }
 
-  private Connection createConnection() throws SQLException {
+  private Connection createConnection(String currentDatabase) throws SQLException {
     Properties info = new Properties();
     info.setProperty("lex", "JAVA");
     info.setProperty("fun", "milvus");
@@ -131,21 +140,65 @@ public class SQLExecutor {
     CalciteConnection calciteConnection = connection.unwrap(CalciteConnection.class);
     SchemaPlus rootSchema = calciteConnection.getRootSchema();
 
-    Schema milvusSchema = createMilvusSchema(rootSchema);
-    rootSchema.add("milvus", milvusSchema);
-    calciteConnection.setSchema("milvus");
+    // Get all databases from Milvus and create schema for each
+    List<String> databases = listMilvusDatabases();
+    for (String dbName : databases) {
+      MilvusSchema dbSchema = createMilvusSchema(dbName);
+      rootSchema.add(dbName, dbSchema);
+    }
+
+    // Set current database (may be different from default after USE command)
+    String dbToUse = currentDatabase != null && !currentDatabase.isEmpty()
+        ? currentDatabase : milvusDatabase;
+    calciteConnection.setSchema(dbToUse);
 
     return connection;
   }
 
-  private Schema createMilvusSchema(SchemaPlus rootSchema) {
-    Map<String, Object> operands = new HashMap<>();
-    operands.put("host", milvusHost);
-    operands.put("port", milvusPort);
-    operands.put("databaseName", milvusDatabase);
+  /**
+   * Checks if a database exists in Milvus.
+   */
+  public boolean databaseExists(String databaseName) {
+    if (databaseName == null || databaseName.isEmpty()) {
+      return false;
+    }
+    List<String> databases = listMilvusDatabases();
+    return databases.contains(databaseName);
+  }
 
-    MilvusSchemaFactory schemaFactory = new MilvusSchemaFactory();
-    return schemaFactory.create(rootSchema, "milvus", operands);
+  /**
+   * Lists all databases from Milvus server using MilvusClientV2.
+   */
+  private List<String> listMilvusDatabases() {
+    List<String> databases = new ArrayList<>();
+    try {
+      // Connect to Milvus using v2 SDK to list databases
+      io.milvus.v2.client.ConnectConfig.ConnectConfigBuilder builder =
+          io.milvus.v2.client.ConnectConfig.builder()
+              .uri("http://" + milvusHost + ":" + milvusPort);
+      if (milvusUsername != null && !milvusUsername.isEmpty()) {
+        builder.username(milvusUsername);
+      }
+      if (milvusPassword != null && !milvusPassword.isEmpty()) {
+        builder.password(milvusPassword);
+      }
+      io.milvus.v2.client.ConnectConfig connectConfig = builder.build();
+      io.milvus.v2.client.MilvusClientV2 client = new io.milvus.v2.client.MilvusClientV2(connectConfig);
+
+      io.milvus.v2.service.database.response.ListDatabasesResp response = client.listDatabases();
+      databases.addAll(response.getDatabaseNames());
+      client.close();
+    } catch (Exception e) {
+      // Fallback to default database if cannot connect
+      System.err.println("[SQLExecutor] Failed to list databases: " + e.getMessage());
+      databases.add(milvusDatabase);
+    }
+    return databases;
+  }
+
+  private MilvusSchema createMilvusSchema(String databaseName) {
+    return new MilvusSchema(milvusHost, milvusPort, databaseName,
+        milvusUsername, milvusPassword);
   }
 
   private QueryResult convertResultSet(ResultSet rs) throws SQLException {
@@ -218,9 +271,24 @@ public class SQLExecutor {
     return new QueryResult(columns, rows, 0);
   }
 
-  private QueryResult buildShowTablesResult() throws SQLException {
+  private QueryResult buildShowDatabasesResult() {
     List<ColumnInfo> columns = new ArrayList<>();
-    columns.add(new ColumnInfo("Tables_in_" + milvusDatabase, Types.VARCHAR, "VARCHAR"));
+    columns.add(new ColumnInfo("Database", Types.VARCHAR, "VARCHAR"));
+    List<List<Object>> rows = new ArrayList<>();
+
+    List<String> databases = listMilvusDatabases();
+    for (String dbName : databases) {
+      rows.add(Arrays.asList(dbName));
+    }
+
+    return new QueryResult(columns, rows, 0);
+  }
+
+  private QueryResult buildShowTablesResult(String currentDatabase) throws SQLException {
+    String dbName = currentDatabase != null && !currentDatabase.isEmpty()
+        ? currentDatabase : milvusDatabase;
+    List<ColumnInfo> columns = new ArrayList<>();
+    columns.add(new ColumnInfo("Tables_in_" + dbName, Types.VARCHAR, "VARCHAR"));
     List<List<Object>> rows = new ArrayList<>();
 
     final Driver driver = new Driver().withPrepareFactory(MilvusPrepareImpl::new);
@@ -228,13 +296,9 @@ public class SQLExecutor {
     info.setProperty("lex", "JAVA");
     info.setProperty("fun", "milvus");
     info.setProperty("defaultCharset", "UTF-8");
-    try (Connection connection = driver.connect("jdbc:calcite:", info)) {
-      CalciteConnection calciteConnection = connection.unwrap(CalciteConnection.class);
-      SchemaPlus rootSchema = calciteConnection.getRootSchema();
-      Schema milvusSchema = createMilvusSchema(rootSchema);
-      for (String tableName : milvusSchema.getTableNames()) {
-        rows.add(Arrays.asList(tableName));
-      }
+    MilvusSchema milvusSchema = createMilvusSchema(dbName);
+    for (String tableName : milvusSchema.getTableNames()) {
+      rows.add(Arrays.asList(tableName));
     }
     return new QueryResult(columns, rows, 0);
   }

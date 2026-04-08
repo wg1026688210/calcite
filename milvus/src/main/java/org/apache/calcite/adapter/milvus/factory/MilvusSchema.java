@@ -19,8 +19,6 @@ package org.apache.calcite.adapter.milvus.factory;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 
-import io.milvus.pool.MilvusClientV2Pool;
-import io.milvus.pool.PoolConfig;
 import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.collection.request.CreateCollectionReq;
@@ -31,6 +29,10 @@ import io.milvus.v2.service.collection.response.ListCollectionsResp;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Schema implementation for Milvus database.
+ * Uses a global singleton MilvusClientV2 for all operations.
+ */
 public class MilvusSchema extends AbstractSchema {
   private final Map<String, Table> tableMap = new HashMap<>();
 
@@ -40,8 +42,6 @@ public class MilvusSchema extends AbstractSchema {
   private final String user;
   private final String password;
 
-  private final String poolKey;
-  private final MilvusClientV2Pool clientPool;
 
   public MilvusSchema(String host, Integer port, String databaseName, String user,
       String password) {
@@ -51,61 +51,44 @@ public class MilvusSchema extends AbstractSchema {
     this.databaseName = databaseName;
     this.user = user;
     this.password = password;
-
-    // A stable identifier for a group of pooled clients (keyed pool).
-    this.poolKey = buildPoolKey(host, port, databaseName, user);
-
-    try {
-      this.clientPool = new MilvusClientV2Pool(
-          PoolConfig.builder().build(),
-          buildConnectConfig());
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to initialize MilvusClientV2Pool", e);
-    }
-  }
-
-  private static String buildPoolKey(String host, Integer port, String databaseName, String user) {
-    StringBuilder sb = new StringBuilder();
-    sb.append(host).append(':').append(port);
-    if (databaseName != null) {
-      sb.append("/").append(databaseName);
-    }
-    if (user != null) {
-      sb.append("?user=").append(user);
-    }
-    return sb.toString();
   }
 
   private ConnectConfig buildConnectConfig() {
-    ConnectConfig.ConnectConfigBuilder uri = ConnectConfig.builder()
+    ConnectConfig.ConnectConfigBuilder builder = ConnectConfig.builder()
         .uri("http://" + host + ":" + port);
-
-    if (user != null) {
-      uri.username(user);
-    }
-
-    if (password != null) {
-      uri.password(password);
-    }
-
     if (databaseName != null) {
-      uri.dbName(databaseName);
+      builder.dbName(databaseName);
     }
-
-    return uri.build();
+    if (user != null) {
+      builder.username(user);
+    }
+    if (password != null) {
+      builder.password(password);
+    }
+    return builder.build();
   }
 
-  /** Borrow a MilvusClientV2 from the SDK pool. Caller must return it. */
+  /**
+   * Borrows a MilvusClientV2 for this schema's database.
+   * Creates a new client with the specific database context.
+   */
   public MilvusClientV2 borrowClient() {
-    return clientPool.getClient(poolKey);
+    // Create a client with specific database context
+    return new MilvusClientV2(buildConnectConfig());
   }
 
-  /** Return a MilvusClientV2 back to the SDK pool. */
+  /**
+   * Returns a MilvusClientV2 back to the pool.
+   * Closes the client as we create a new one for each borrow.
+   */
   public void returnClient(MilvusClientV2 client) {
-    if (client == null) {
-      return;
+    if (client != null) {
+      try {
+        client.close();
+      } catch (Exception e) {
+        // Ignore close errors
+      }
     }
-    clientPool.returnClient(poolKey, client);
   }
 
   @Override
@@ -125,19 +108,13 @@ public class MilvusSchema extends AbstractSchema {
     return tableMap;
   }
 
-  /**
-   * Compatibility escape hatch: create a standalone client.
-   *
-   * <p>Prefer {@link #borrowClient()} / {@link #returnClient(MilvusClientV2)} for pooling.
-   */
-  public MilvusClientV2 createClient() {
-    return new MilvusClientV2(buildConnectConfig());
-  }
-
   private CreateCollectionReq.CollectionSchema getCollectionSchema(String collectionName,
       MilvusClientV2 milvusClient) {
     DescribeCollectionReq req =
-        DescribeCollectionReq.builder().collectionName(collectionName).build();
+        DescribeCollectionReq.builder()
+            .collectionName(collectionName)
+            .databaseName(databaseName)
+            .build();
     DescribeCollectionResp describeCollectionResp =
         milvusClient.describeCollection(req);
     return describeCollectionResp.getCollectionSchema();

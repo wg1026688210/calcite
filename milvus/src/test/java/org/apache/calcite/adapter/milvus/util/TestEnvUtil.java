@@ -31,6 +31,8 @@ import io.milvus.param.collection.DropCollectionParam;
 import io.milvus.param.collection.FieldType;
 import io.milvus.param.collection.HasCollectionParam;
 import io.milvus.param.collection.LoadCollectionParam;
+import io.milvus.param.collection.CreateDatabaseParam;
+import io.milvus.param.collection.DropDatabaseParam;
 import io.milvus.param.dml.InsertParam;
 import io.milvus.param.index.CreateIndexParam;
 
@@ -38,25 +40,94 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TestEnvUtil {
-  private String  collectionName;
-  private  MilvusServiceClient milvusServiceClient;
+  private String collectionName;
+  private String databaseName;
+  private MilvusServiceClient milvusServiceClient;
   private final MetricType metricType;
 
   public TestEnvUtil(String collectionName, MilvusServiceClient milvusServiceClient) {
-    this(collectionName, milvusServiceClient, MetricType.L2);
+    this(collectionName, "default", milvusServiceClient, MetricType.L2);
+  }
+
+  public TestEnvUtil(String collectionName, String databaseName,
+      MilvusServiceClient milvusServiceClient) {
+    this(collectionName, databaseName, milvusServiceClient, MetricType.L2);
   }
 
   public TestEnvUtil(String collectionName, MilvusServiceClient milvusServiceClient,
       MetricType metricType) {
+    this(collectionName, "default", milvusServiceClient, metricType);
+  }
+
+  public TestEnvUtil(String collectionName, String databaseName,
+      MilvusServiceClient milvusServiceClient, MetricType metricType) {
     this.collectionName = collectionName;
+    this.databaseName = databaseName != null ? databaseName : "default";
     this.milvusServiceClient = milvusServiceClient;
     this.metricType = metricType;
   }
 
   public void createExampleCollection() {
+    ensureDatabaseExists();
     dropCollectionIfExists();
     createFloatVectorCollection();
     generateVectorExampleData();
+  }
+
+  /**
+   * Creates a new database if it doesn't exist.
+   */
+  public void ensureDatabaseExists() {
+    if (databaseName == null || "default".equals(databaseName)) {
+      return; // default database always exists
+    }
+
+    try {
+      // Check if database exists by listing all databases
+      boolean exists = false;
+      R<io.milvus.grpc.ListDatabasesResponse> listResponse = milvusServiceClient.listDatabases();
+      if (listResponse.getStatus() == 0 && listResponse.getData() != null) {
+        for (String dbName : listResponse.getData().getDbNamesList()) {
+          if (databaseName.equals(dbName)) {
+            exists = true;
+            break;
+          }
+        }
+      }
+
+      if (!exists) {
+        // Create database
+        CreateDatabaseParam createDbParam = CreateDatabaseParam.newBuilder()
+            .withDatabaseName(databaseName)
+            .build();
+        R<RpcStatus> response = milvusServiceClient.createDatabase(createDbParam);
+        if (response.getStatus() != 0) {
+          throw new RuntimeException("Failed to create database: " + response.getMessage());
+        }
+        System.out.println("[TestEnvUtil] Created database: " + databaseName);
+      }
+    } catch (Exception e) {
+      System.out.println("[TestEnvUtil] Warning: Database check/create failed: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Drops the database and all its collections.
+   */
+  public void dropDatabase() {
+    if (databaseName == null || "default".equals(databaseName)) {
+      return; // don't drop default database
+    }
+
+    try {
+      DropDatabaseParam dropDbParam = DropDatabaseParam.newBuilder()
+          .withDatabaseName(databaseName)
+          .build();
+      milvusServiceClient.dropDatabase(dropDbParam);
+      System.out.println("[TestEnvUtil] Dropped database: " + databaseName);
+    } catch (Exception e) {
+      System.out.println("[TestEnvUtil] Warning: Failed to drop database: " + e.getMessage());
+    }
   }
 
   private void generateVectorExampleData() {
@@ -96,6 +167,7 @@ public class TestEnvUtil {
     // Insert data
     InsertParam insertParam = InsertParam.newBuilder()
         .withCollectionName(collectionName)
+        .withDatabaseName(databaseName)
         .withFields(fields)
         .build();
 
@@ -107,6 +179,7 @@ public class TestEnvUtil {
 
     CreateIndexParam indexParam = CreateIndexParam.newBuilder()
         .withCollectionName(collectionName)
+        .withDatabaseName(databaseName)
         .withFieldName(CommonData.defaultVectorField)
         .withIndexName("float_vector_idx")
         .withIndexType(IndexType.IVF_FLAT)
@@ -123,6 +196,7 @@ public class TestEnvUtil {
     // Load collection
     LoadCollectionParam loadParam = LoadCollectionParam.newBuilder()
         .withCollectionName(collectionName)
+        .withDatabaseName(databaseName)
         .withSyncLoad(Boolean.TRUE)
         .build();
 
@@ -155,10 +229,12 @@ public class TestEnvUtil {
 
   private boolean collectionExists(String collectionName) {
     try {
-      HasCollectionParam param = HasCollectionParam.newBuilder()
-          .withCollectionName(collectionName)
-          .build();
-      R<Boolean> response = milvusServiceClient.hasCollection(param);
+      HasCollectionParam.Builder paramBuilder = HasCollectionParam.newBuilder()
+          .withCollectionName(collectionName);
+      if (databaseName != null && !"default".equals(databaseName)) {
+        paramBuilder.withDatabaseName(databaseName);
+      }
+      R<Boolean> response = milvusServiceClient.hasCollection(paramBuilder.build());
       return response.getData();
     } catch (Exception e) {
       return false;
@@ -202,12 +278,15 @@ public class TestEnvUtil {
         .withFieldTypes(fieldsSchema)
         .build();
 
-    CreateCollectionParam createCollectionReq = CreateCollectionParam.newBuilder()
+    CreateCollectionParam.Builder createCollectionReqBuilder = CreateCollectionParam.newBuilder()
         .withCollectionName(collectionName)
         .withDescription("Collection for vector search testing")
         .withShardsNum(2)
-        .withSchema(schemaParam)
-        .build();
+        .withSchema(schemaParam);
+    if (databaseName != null && !"default".equals(databaseName)) {
+      createCollectionReqBuilder.withDatabaseName(databaseName);
+    }
+    CreateCollectionParam createCollectionReq = createCollectionReqBuilder.build();
 
     R<RpcStatus> response = milvusServiceClient.createCollection(createCollectionReq);
     if (response.getStatus() != 0) {
@@ -216,9 +295,11 @@ public class TestEnvUtil {
   }
 
   private void dropCollection() {
-    DropCollectionParam dropParam = DropCollectionParam.newBuilder()
-        .withCollectionName(collectionName)
-        .build();
-    milvusServiceClient.dropCollection(dropParam);
+    DropCollectionParam.Builder dropParamBuilder = DropCollectionParam.newBuilder()
+        .withCollectionName(collectionName);
+    if (databaseName != null && !"default".equals(databaseName)) {
+      dropParamBuilder.withDatabaseName(databaseName);
+    }
+    milvusServiceClient.dropCollection(dropParamBuilder.build());
   }
 }

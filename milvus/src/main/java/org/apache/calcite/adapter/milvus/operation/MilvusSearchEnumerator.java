@@ -38,6 +38,7 @@ public class MilvusSearchEnumerator implements Enumerator<Object> {
   private final MilvusClientV2 client;
   private final Iterator<Row> iterator;
   private Object current;
+  private MilvusSchema milvusSchema;
 
   public MilvusSearchEnumerator(
       MilvusSchema schema,
@@ -49,8 +50,8 @@ public class MilvusSearchEnumerator implements Enumerator<Object> {
       String collectionName,
       List<Pair<Integer, MilvusProjectExpression>> projectRowTypeMap,
       @Nullable Map<String, String> milvusOptions) {
-
-    this.client = schema.createClient();
+    this.milvusSchema = schema;
+    this.client = schema.borrowClient();
 
     List<String> outputFields = getOutputFields(projectRowTypeMap);
 
@@ -177,7 +178,7 @@ public class MilvusSearchEnumerator implements Enumerator<Object> {
 
   @Override public void close() {
     try {
-      client.close();
+      milvusSchema.returnClient(client);
     } catch (Exception ignore) {
       // ignore
     }

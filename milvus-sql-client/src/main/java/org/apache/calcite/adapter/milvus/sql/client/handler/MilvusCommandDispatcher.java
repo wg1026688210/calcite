@@ -39,7 +39,6 @@ import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.util.AttributeKey;
 
 import java.sql.SQLException;
 import java.util.Collection;
@@ -51,16 +50,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
 
-  public static final AttributeKey<ConnectionSession> SESSION_KEY =
-      AttributeKey.valueOf("milvus.session");
-
   private final SQLExecutor sqlExecutor;
 
   public MilvusCommandDispatcher(MilvusServerConfig config) {
     this.sqlExecutor = new SQLExecutor(
         config.getMilvusHost(),
         config.getMilvusPort(),
-        config.getMilvusDatabase()
+        config.getMilvusDatabase(),
+        config.getMilvusUsername(),
+        config.getMilvusPassword()
     );
   }
 
@@ -129,7 +127,7 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
 
   private CommandExecutor createExecutor(MySQLCommandPacket command,
                                          ChannelHandlerContext ctx) {
-    ConnectionSession session = ctx.channel().attr(SESSION_KEY).get();
+    ConnectionSession session = ctx.channel().attr(MilvusAuthHandler.SESSION_KEY).get();
 
     if (command instanceof MySQLComQueryPacket) {
       return new MilvusComQueryExecutor(
