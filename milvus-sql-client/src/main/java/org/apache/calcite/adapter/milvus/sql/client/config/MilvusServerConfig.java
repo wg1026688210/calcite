@@ -16,6 +16,13 @@
  */
 package org.apache.calcite.adapter.milvus.sql.client.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+/**
+ * Configuration for Milvus MySQL Server.
+ * Supports YAML configuration file loading via Jackson.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class MilvusServerConfig {
   private int port = 3307;
   private String host = "0.0.0.0";
@@ -25,6 +32,13 @@ public class MilvusServerConfig {
   private String milvusDatabase = "default";
   private String milvusUsername = "";
   private String milvusPassword = "";
+
+  // MySQL protocol authentication (defaults to empty, allowing any connection)
+  private String mysqlUsername = "";
+  private String mysqlPassword = "";
+
+  // Idle connection timeout (seconds), default 30 minutes
+  private int idleTimeoutSeconds = 1800;
 
   public int getPort() {
     return port;
@@ -90,11 +104,27 @@ public class MilvusServerConfig {
     this.milvusPassword = milvusPassword;
   }
 
+  public String getMysqlUsername() {
+    return mysqlUsername;
+  }
+
+  public void setMysqlUsername(String mysqlUsername) {
+    this.mysqlUsername = mysqlUsername;
+  }
+
+  public String getMysqlPassword() {
+    return mysqlPassword;
+  }
+
+  public void setMysqlPassword(String mysqlPassword) {
+    this.mysqlPassword = mysqlPassword;
+  }
+
   // SSL configuration (auto-generated self-signed certificate, zero config)
   private boolean sslEnabled = false;
 
-  // Auth plugin configuration
-  private String authPlugin = "mysql_native_password";
+  // Auth plugin configuration - default to caching_sha2_password for MySQL 8.0+ compatibility
+  private String authPlugin = "caching_sha2_password";
 
   public boolean isSslEnabled() {
     return sslEnabled;
@@ -110,5 +140,13 @@ public class MilvusServerConfig {
 
   public void setAuthPlugin(String authPlugin) {
     this.authPlugin = authPlugin;
+  }
+
+  public int getIdleTimeoutSeconds() {
+    return idleTimeoutSeconds;
+  }
+
+  public void setIdleTimeoutSeconds(int idleTimeoutSeconds) {
+    this.idleTimeoutSeconds = idleTimeoutSeconds;
   }
 }

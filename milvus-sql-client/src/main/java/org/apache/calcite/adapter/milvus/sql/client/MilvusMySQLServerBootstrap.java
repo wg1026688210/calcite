@@ -16,30 +16,43 @@
  */
 package org.apache.calcite.adapter.milvus.sql.client;
 
+import org.apache.calcite.adapter.milvus.sql.client.config.ConfigLoader;
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
 import org.apache.calcite.adapter.milvus.sql.client.server.MilvusMySQLServer;
 
 public class MilvusMySQLServerBootstrap {
 
   public static void main(String[] args) throws Exception {
-    MilvusServerConfig config = new MilvusServerConfig();
-
+    // Load configuration from YAML file or use defaults
+    MilvusServerConfig config;
     if (args.length > 0) {
-      config.setPort(Integer.parseInt(args[0]));
+      config = ConfigLoader.load(args[0]);
+    } else {
+      config = ConfigLoader.load();
     }
-    if (args.length > 1) {
-      config.setMilvusHost(args[1]);
-    }
-    if (args.length > 2) {
-      config.setMilvusPort(Integer.parseInt(args[2]));
-    }
+
+    // Print startup configuration
+    System.out.println("[Bootstrap] Starting Milvus MySQL Server");
+    System.out.println("[Bootstrap] Configuration:");
+    System.out.println("  MySQL Protocol: " + config.getHost() + ":" + config.getPort());
+    System.out.println("  MySQL Auth: " + (config.getMysqlUsername().isEmpty() ? "ANY" : config.getMysqlUsername()));
+    System.out.println("  Milvus Backend: " + config.getMilvusHost() + ":" + config.getMilvusPort());
+    System.out.println("  Milvus Auth: " + (config.getMilvusUsername().isEmpty() ? "NONE" : config.getMilvusUsername()));
+    System.out.println("  Database: " + config.getMilvusDatabase());
+    System.out.println("  Idle Timeout: " + config.getIdleTimeoutSeconds() + "s");
+    System.out.println("  SSL Enabled: " + config.isSslEnabled());
+    System.out.println("  Auth Plugin: " + config.getAuthPlugin());
 
     MilvusMySQLServer server = new MilvusMySQLServer(config);
     server.start();
 
-    System.out.println("Milvus MySQL Server started on port " + config.getPort());
-    System.out.println("Connected to Milvus at " + config.getMilvusHost() + ":" + config.getMilvusPort());
+    System.out.println("[Bootstrap] Server started successfully");
 
-    Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
+    Runtime.getRuntime().addShutdownHook(
+        new Thread(() -> {
+      System.out.println("[Bootstrap] Shutting down server...");
+      server.stop();
+      System.out.println("[Bootstrap] Server stopped");
+    }));
   }
 }

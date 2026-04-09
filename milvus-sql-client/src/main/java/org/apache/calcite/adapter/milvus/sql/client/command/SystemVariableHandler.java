@@ -17,8 +17,9 @@
 package org.apache.calcite.adapter.milvus.sql.client.command;
 
 import org.apache.calcite.adapter.milvus.sql.client.response.MySQLResponseBuilder;
-import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
+
 import org.apache.shardingsphere.database.protocol.mysql.packet.generic.MySQLOKPacket;
+import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -35,8 +36,8 @@ import java.util.regex.Pattern;
 public final class SystemVariableHandler {
 
   // Pattern to match SELECT @@variable or SELECT @@session.variable
-  private static final Pattern VARIABLE_PATTERN = Pattern.compile(
-      "@@(?:session\\.)?([a-zA-Z_]+)");
+  private static final Pattern VARIABLE_PATTERN =
+      Pattern.compile("@@(?:session\\.)?([a-zA-Z_]+)");
 
   // Mock values for common system variables
   private static final Map<String, String> VARIABLE_VALUES = new HashMap<>();
@@ -60,6 +61,11 @@ public final class SystemVariableHandler {
     VARIABLE_VALUES.put("max_allowed_packet", "4194304");
     VARIABLE_VALUES.put("net_write_timeout", "60");
     VARIABLE_VALUES.put("performance_schema", "OFF");
+    VARIABLE_VALUES.put("version_comment", "MySQL Community Server - Milvus Gateway");
+    VARIABLE_VALUES.put("version", "8.0.33");
+    VARIABLE_VALUES.put("version_compile_machine", "x86_64");
+    VARIABLE_VALUES.put("version_compile_os", "Linux");
+    VARIABLE_VALUES.put("version_compile_zlib", "1.2.13");
 
     // Cache and mode variables (deprecated in MySQL 8.0 but still queried)
     VARIABLE_VALUES.put("query_cache_size", "0");
@@ -92,11 +98,19 @@ public final class SystemVariableHandler {
    * Handles system variable query and returns mock result.
    */
   public static Collection<DatabasePacket> handle(String sql) {
+    return handle(sql, false);
+  }
+
+  /**
+   * Handles system variable query and returns mock result.
+   * @param deprecateEof true if CLIENT_DEPRECATE_EOF is set (MySQL 5.7.5+)
+   */
+  public static Collection<DatabasePacket> handle(String sql, boolean deprecateEof) {
     List<DatabasePacket> packets = new ArrayList<>();
 
     if (sql.toUpperCase().contains("SHOW VARIABLES")) {
       // Handle SHOW VARIABLES WHERE Variable_name IN (...)
-      return handleShowVariables(sql);
+      return handleShowVariables(sql, deprecateEof);
     }
 
     // Handle SELECT @@variable AS alias, ...
@@ -110,19 +124,19 @@ public final class SystemVariableHandler {
     }
 
     if (results.isEmpty()) {
-      // No variables matched, return empty OK
-      packets.add(new MySQLOKPacket(0, 0, 0));
+      // No variables matched, return empty OK with proper status flags
+      packets.add(MySQLResponseBuilder.buildOKPacket(0));
       return packets;
     }
 
     // Build result set with variable names and values
-    return buildVariableResultSet(results);
+    return buildVariableResultSet(results, deprecateEof);
   }
 
   /**
    * Handles SHOW VARIABLES query.
    */
-  private static Collection<DatabasePacket> handleShowVariables(String sql) {
+  private static Collection<DatabasePacket> handleShowVariables(String sql, boolean deprecateEof) {
     // Extract variable names from WHERE clause if present
     List<String> requestedVars = extractVariableNames(sql);
 
@@ -138,7 +152,7 @@ public final class SystemVariableHandler {
       }
     }
 
-    return buildShowVariablesResultSet(results);
+    return buildShowVariablesResultSet(results, deprecateEof);
   }
 
   /**
@@ -147,8 +161,8 @@ public final class SystemVariableHandler {
   private static List<String> extractVariableNames(String sql) {
     List<String> vars = new ArrayList<>();
     // Match Variable_name = 'xxx' or Variable_name LIKE 'xxx'
-    Pattern pattern = Pattern.compile(
-        "Variable_name\\s*(?:=|LIKE)\\s*['\"]([^'\"]+)['\"]",
+    Pattern pattern =
+        Pattern.compile("Variable_name\\s*(?:=|LIKE)\\s*['\"]([^'\"]+)['\"]",
         Pattern.CASE_INSENSITIVE);
     Matcher matcher = pattern.matcher(sql);
     while (matcher.find()) {
@@ -161,17 +175,18 @@ public final class SystemVariableHandler {
    * Builds result set for SELECT @@variable queries.
    */
   private static Collection<DatabasePacket> buildVariableResultSet(
-      Map<String, String> variables) {
+      Map<String, String> variables, boolean deprecateEof) {
     // For SELECT @@var AS alias, we return the values directly
-    // This is simplified - in production you'd build proper column definitions
-    return MySQLResponseBuilder.buildVariableQueryResponse(variables);
+    // Use the first variable name as column name for proper client compatibility
+    String columnName = variables.isEmpty() ? null : "@@" + variables.keySet().iterator().next();
+    return MySQLResponseBuilder.buildVariableQueryResponse(variables, deprecateEof, columnName);
   }
 
   /**
    * Builds result set for SHOW VARIABLES queries.
    */
   private static Collection<DatabasePacket> buildShowVariablesResultSet(
-      Map<String, String> variables) {
-    return MySQLResponseBuilder.buildShowVariablesResponse(variables);
+      Map<String, String> variables, boolean deprecateEof) {
+    return MySQLResponseBuilder.buildShowVariablesResponse(variables, deprecateEof);
   }
 }

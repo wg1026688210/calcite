@@ -38,7 +38,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -111,8 +110,7 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
     }
   }
 
-  @Test
-  void testBasicSelect() throws Exception {
+  @Test void testBasicSelect() throws Exception {
     Assumptions.assumeTrue(connectionEstablished, "Connection not established");
     try (Statement stmt = jdbcConnection.createStatement();
          ResultSet rs = stmt.executeQuery("SELECT 1")) {
@@ -122,13 +120,12 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
     }
   }
 
-  @Test
-  void testSelectFromCollection() throws Exception {
+  @Test void testSelectFromCollection() throws Exception {
     Assumptions.assumeTrue(connectionEstablished, "Connection not established");
     System.out.println("Testing SELECT from collection: " + TEST_COLLECTION);
     try (Statement stmt = jdbcConnection.createStatement();
-         ResultSet rs = stmt.executeQuery(
-             "SELECT book_name, book_content , "+ CommonData.defaultVectorField+" FROM " + TEST_COLLECTION + " LIMIT 10")) {
+         ResultSet rs =
+             stmt.executeQuery("SELECT book_name, book_content , "+ CommonData.defaultVectorField+" FROM " + TEST_COLLECTION + " LIMIT 10")) {
 
       Assertions.assertEquals("book_name", rs.getMetaData().getColumnName(1));
       Assertions.assertEquals("book_name", rs.getMetaData().getColumnLabel(1));
@@ -144,8 +141,7 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
     }
   }
 
-  @Test
-  void testPreparedStatement() throws Exception {
+  @Test void testPreparedStatement() throws Exception {
     Assumptions.assumeTrue(connectionEstablished, "Connection not established");
     // Note: Prepared statements require COM_STMT_PREPARE support
     // This test verifies the connection works with prepared statement syntax
@@ -157,8 +153,7 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
     }
   }
 
-  @Test
-  void testUseDatabase() throws Exception {
+  @Test void testUseDatabase() throws Exception {
     Assumptions.assumeTrue(connectionEstablished, "Connection not established");
     try (Statement stmt = jdbcConnection.createStatement()) {
       // USE command should return OK
@@ -167,8 +162,7 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
     }
   }
 
-  @Test
-  void testShowTables() throws Exception {
+  @Test void testShowTables() throws Exception {
     Assumptions.assumeTrue(connectionEstablished, "Connection not established");
     try (Statement stmt = jdbcConnection.createStatement();
          ResultSet rs = stmt.executeQuery("SHOW TABLES")) {
@@ -181,8 +175,7 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
     }
   }
 
-  @Test
-  void testShowDatabases() throws Exception {
+  @Test void testShowDatabases() throws Exception {
     Assumptions.assumeTrue(connectionEstablished, "Connection not established");
     try (Statement stmt = jdbcConnection.createStatement();
          ResultSet rs = stmt.executeQuery("SHOW DATABASES")) {
@@ -195,12 +188,11 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
     }
   }
 
-  @Test
-  void testCollectionMetadata() throws Exception {
+  @Test void testCollectionMetadata() throws Exception {
     Assumptions.assumeTrue(connectionEstablished, "Connection not established");
     try (Statement stmt = jdbcConnection.createStatement();
-         ResultSet rs = stmt.executeQuery(
-             "SELECT book_name, book_content FROM " + TEST_COLLECTION + " LIMIT 1")) {
+         ResultSet rs =
+             stmt.executeQuery("SELECT book_name, book_content FROM " + TEST_COLLECTION + " LIMIT 1")) {
       Assertions.assertEquals(TEST_COLLECTION, rs.getMetaData().getTableName(1));
       Assertions.assertTrue(rs.getMetaData().getColumnDisplaySize(1) > 0);
       Assertions.assertEquals("VARCHAR", rs.getMetaData().getColumnTypeName(1).toUpperCase());

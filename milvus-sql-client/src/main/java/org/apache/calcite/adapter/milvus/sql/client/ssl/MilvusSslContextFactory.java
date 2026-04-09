@@ -20,6 +20,7 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
+
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
 import org.bouncycastle.asn1.x500.style.BCStyle;
@@ -37,13 +38,13 @@ import java.security.Security;
 import java.security.cert.X509Certificate;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
-
 import javax.net.ssl.SSLEngine;
 
 /**
  * Factory for creating Netty {@link SslContext} with auto-generated self-signed certificate.
- * <p>
- * Inspired by ShardingSphere's ProxySSLContext - zero configuration SSL.
+ *
+ *
+ * <p>Inspired by ShardingSphere's ProxySSLContext - zero configuration SSL.
  */
 public final class MilvusSslContextFactory {
 
@@ -106,8 +107,8 @@ public final class MilvusSslContextFactory {
     ContentSigner contentSigner = new JcaContentSignerBuilder("SHA256WithRSA")
         .build(keyPair.getPrivate());
 
-    JcaX509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(
-        dnName, serialNumber, startDate, endDate, dnName, keyPair.getPublic());
+    JcaX509v3CertificateBuilder certBuilder =
+        new JcaX509v3CertificateBuilder(dnName, serialNumber, startDate, endDate, dnName, keyPair.getPublic());
 
     return new JcaX509CertificateConverter().getCertificate(certBuilder.build(contentSigner));
   }

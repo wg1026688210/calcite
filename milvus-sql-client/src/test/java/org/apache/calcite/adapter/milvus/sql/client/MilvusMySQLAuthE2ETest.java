@@ -68,8 +68,7 @@ public class MilvusMySQLAuthE2ETest extends MilvusBaseE2ETest {
     Thread.sleep(1000);
   }
 
-  @Test
-  public void testSuccessfulAuth() throws Exception {
+  @Test public void testSuccessfulAuth() throws Exception {
     String url = buildJdbcUrl();
     try (Connection conn = DriverManager.getConnection(url, TEST_USER, TEST_PASSWORD);
          Statement stmt = conn.createStatement();
@@ -92,24 +91,21 @@ public class MilvusMySQLAuthE2ETest extends MilvusBaseE2ETest {
     }
   }
 
-  @Test
-  public void testWrongPasswordRejected() {
+  @Test public void testWrongPasswordRejected() {
     String url = buildJdbcUrl();
     Assertions.assertThrows(SQLException.class, () -> {
       DriverManager.getConnection(url, TEST_USER, "wrongpass");
     });
   }
 
-  @Test
-  public void testWrongUsernameRejected() {
+  @Test public void testWrongUsernameRejected() {
     String url = buildJdbcUrl();
     Assertions.assertThrows(SQLException.class, () -> {
       DriverManager.getConnection(url, "notauser", TEST_PASSWORD);
     });
   }
 
-  @Test
-  public void testEmptyPasswordRejected() {
+  @Test public void testEmptyPasswordRejected() {
     String url = buildJdbcUrl();
     Assertions.assertThrows(SQLException.class, () -> {
       DriverManager.getConnection(url, TEST_USER, "");

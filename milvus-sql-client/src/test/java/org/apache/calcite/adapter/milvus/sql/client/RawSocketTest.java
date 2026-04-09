@@ -20,7 +20,6 @@ import org.apache.calcite.adapter.milvus.MilvusBaseE2ETest;
 import org.apache.calcite.adapter.milvus.extension.MilvusExtension;
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
 import org.apache.calcite.adapter.milvus.sql.client.server.MilvusMySQLServer;
-import org.apache.calcite.adapter.milvus.util.TestEnvUtil;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -28,7 +27,6 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
@@ -59,8 +57,7 @@ public class RawSocketTest extends MilvusBaseE2ETest {
     Thread.sleep(1000);
   }
 
-  @Test
-  @Disabled("Debug test - may timeout due to socket read")
+  @Test @Disabled("Debug test - may timeout due to socket read")
   public void testRawSocket() throws Exception {
     try (Socket socket = new Socket("127.0.0.1", MYSQL_PORT)) {
       socket.setSoTimeout(10000);
@@ -194,18 +191,28 @@ public class RawSocketTest extends MilvusBaseE2ETest {
   }
 
   private byte[] buildHandshakeResponse() {
-    // Minimal handshake response for MySQL 4.1+
-    // Format: 4 bytes capability, 4 bytes max packet size, 1 byte charset, 23 bytes reserved, username\0
+    return buildHandshakeResponse(0x0001a685);  // Default JDBC-like capabilities
+  }
+
+  private byte[] buildHandshakeResponseMySQLCLI() {
+    // MySQL 8.0/9.6 CLI capabilities: 0x19bfa285
+    return buildHandshakeResponse(0x19bfa285);
+  }
+
+  private byte[] buildHandshakeResponse(int capFlags) {
+    // Build handshake response based on capability flags
+    // MySQL CLI (0x19bfa285) has CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA set (0x200000)
+    boolean useLenencAuth = (capFlags & 0x00200000) != 0;
+    boolean useSecureConnection = (capFlags & 0x00008000) != 0;
+    boolean usePluginAuth = (capFlags & 0x00080000) != 0;  // CLIENT_PLUGIN_AUTH
 
     java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
 
-    // Payload
-    // Capability flags (4 bytes): CLIENT_PROTOCOL_41 | CLIENT_SECURE_CONNECTION | CLIENT_PLUGIN_AUTH
-    int cap = 0x0001a685;  // Basic capabilities
-    baos.write(cap & 0xFF);
-    baos.write((cap >> 8) & 0xFF);
-    baos.write((cap >> 16) & 0xFF);
-    baos.write((cap >> 24) & 0xFF);
+    // Capability flags (4 bytes)
+    baos.write(capFlags & 0xFF);
+    baos.write((capFlags >> 8) & 0xFF);
+    baos.write((capFlags >> 16) & 0xFF);
+    baos.write((capFlags >> 24) & 0xFF);
 
     // Max packet size (4 bytes)
     baos.write(0x00);
@@ -228,8 +235,25 @@ public class RawSocketTest extends MilvusBaseE2ETest {
     }
     baos.write(0x00);  // null terminator
 
-    // Auth response (empty for now)
-    baos.write(0x00);  // length 0
+    // Auth response - must be formatted according to capability flags
+    if (useLenencAuth) {
+      // CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA: length-encoded integer for length
+      baos.write(0x00);  // length 0 (length-encoded integer)
+    } else if (useSecureConnection) {
+      // CLIENT_SECURE_CONNECTION: 1 byte length prefix
+      baos.write(0x00);  // length 0
+    } else {
+      // Old style: null-terminated string
+      baos.write(0x00);  // empty null-terminated string
+    }
+
+    // Auth plugin name (null-terminated string) - required when CLIENT_PLUGIN_AUTH is set
+    if (usePluginAuth) {
+      byte[] pluginName = "mysql_native_password\0".getBytes(StandardCharsets.UTF_8);
+      for (byte b : pluginName) {
+        baos.write(b);
+      }
+    }
 
     byte[] payload = baos.toByteArray();
 
@@ -363,5 +387,114 @@ public class RawSocketTest extends MilvusBaseE2ETest {
     }
 
     System.err.println("[RAW]   Final position: " + pos + " / " + payload.length);
+  }
+
+  @Test
+  
+  public void testRawSocketMySQLCLI() throws Exception {
+    // This test simulates MySQL 8.0/9.6 CLI client behavior
+    try (Socket socket = new Socket("127.0.0.1", MYSQL_PORT)) {
+      socket.setSoTimeout(10000);
+      InputStream in = socket.getInputStream();
+      OutputStream out = socket.getOutputStream();
+
+      // Read handshake packet
+      byte[] header = new byte[4];
+      int read = in.read(header);
+      System.err.println("[CLI] Handshake header read: " + read);
+      if (read == 4) {
+        int length = (header[0] & 0xFF) | ((header[1] & 0xFF) << 8) | ((header[2] & 0xFF) << 16);
+        int seq = header[3] & 0xFF;
+        System.err.println("[CLI] Handshake packet length: " + length + ", seq: " + seq);
+
+        byte[] payload = new byte[length];
+        read = in.read(payload);
+        System.err.println("[CLI] Handshake payload read: " + read);
+      }
+
+      // Send handshake response with MySQL CLI capabilities (0x19bfa285)
+      byte[] response = buildHandshakeResponseMySQLCLI();
+      out.write(response);
+      out.flush();
+      System.err.println("[CLI] Sent handshake response with CLI capabilities: " + response.length + " bytes");
+
+      // Read OK packet
+      read = in.read(header);
+      System.err.println("[CLI] OK packet header read: " + read);
+      if (read == 4) {
+        int length = (header[0] & 0xFF) | ((header[1] & 0xFF) << 8) | ((header[2] & 0xFF) << 16);
+        int seq = header[3] & 0xFF;
+        System.err.println("[CLI] OK packet length: " + length + ", seq: " + seq);
+
+        byte[] payload = new byte[length];
+        read = in.read(payload);
+        System.err.println("[CLI] OK payload read: " + read + ", first byte: " + (payload.length > 0 ? (payload[0] & 0xFF) : "N/A"));
+
+        // Parse OK packet
+        if (payload.length > 0 && (payload[0] & 0xFF) == 0x00) {
+          System.err.println("[CLI] -> Valid OK packet");
+          // Status flags at offset 3-4 (after affected_rows and last_insert_id)
+          if (payload.length >= 6) {
+            int statusFlags = (payload[3] & 0xFF) | ((payload[4] & 0xFF) << 8);
+            System.err.println("[CLI]    Status flags: 0x" + Integer.toHexString(statusFlags));
+          }
+        } else if (payload.length > 0 && (payload[0] & 0xFF) == 0xFF) {
+          System.err.println("[CLI] -> ERROR packet!");
+          // Parse error details
+          if (payload.length >= 3) {
+            int errorCode = (payload[1] & 0xFF) | ((payload[2] & 0xFF) << 8);
+            System.err.println("[CLI]    Error code: " + errorCode);
+            if (payload.length > 3) {
+              // SQL state marker (#) at position 3
+              String sqlState = new String(payload, 4, 5, StandardCharsets.UTF_8);
+              System.err.println("[CLI]    SQL state: " + sqlState);
+              String message = new String(payload, 9, payload.length - 9, StandardCharsets.UTF_8);
+              System.err.println("[CLI]    Error message: " + message);
+            }
+          }
+        }
+      }
+
+      // Send COM_QUERY for "SELECT @@version_comment" (what MySQL CLI sends)
+      byte[] query = buildComQuery("SELECT @@version_comment");
+      out.write(query);
+      out.flush();
+      System.err.println("[CLI] Sent COM_QUERY for @@version_comment");
+
+      // Read result set packets
+      for (int i = 0; i < 5; i++) {  // Expecting 5 packets
+        read = in.read(header);
+        if (read < 0) {
+          System.err.println("[CLI] Connection closed unexpectedly at packet " + i);
+          break;
+        }
+        if (read == 4) {
+          int length = (header[0] & 0xFF) | ((header[1] & 0xFF) << 8) | ((header[2] & 0xFF) << 16);
+          int seq = header[3] & 0xFF;
+          System.err.println("[CLI] Packet " + i + " - length: " + length + ", seq: " + seq);
+
+          byte[] payload = new byte[length];
+          int totalRead = 0;
+          while (totalRead < length) {
+            int r = in.read(payload, totalRead, length - totalRead);
+            if (r < 0) break;
+            totalRead += r;
+          }
+          System.err.println("[CLI] Packet " + i + " payload read: " + totalRead + ", first byte: 0x" + String.format("%02x", payload[0] & 0xFF));
+
+          // Check for EOF (0xfe) or OK (0x00) or ERROR (0xff)
+          int firstByte = payload[0] & 0xFF;
+          if (firstByte == 0xfe) {
+            System.err.println("[CLI] -> EOF packet");
+          } else if (firstByte == 0x00) {
+            System.err.println("[CLI] -> OK packet");
+          } else if (firstByte == 0xff) {
+            System.err.println("[CLI] -> ERROR packet");
+          }
+        }
+      }
+
+      System.err.println("[CLI] Test completed!");
+    }
   }
 }

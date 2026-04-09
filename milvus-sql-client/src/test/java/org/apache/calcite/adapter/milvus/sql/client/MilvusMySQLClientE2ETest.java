@@ -91,8 +91,7 @@ public class MilvusMySQLClientE2ETest extends MilvusBaseE2ETest {
         "allowPublicKeyRetrieval=true";
   }
 
-  @Test
-  public void testMySQLJDBCConnection() throws Exception {
+  @Test public void testMySQLJDBCConnection() throws Exception {
     Assumptions.assumeTrue(connectionEstablished, "Connection not established");
 
     String url = buildJdbcUrl();
@@ -113,8 +112,7 @@ public class MilvusMySQLClientE2ETest extends MilvusBaseE2ETest {
     }
   }
 
-  @Test
-  public void testSelectFromCollection() throws Exception {
+  @Test public void testSelectFromCollection() throws Exception {
     Assumptions.assumeTrue(connectionEstablished, "Connection not established");
 
     String url = buildJdbcUrl();

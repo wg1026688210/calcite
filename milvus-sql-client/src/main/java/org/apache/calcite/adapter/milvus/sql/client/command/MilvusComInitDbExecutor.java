@@ -40,8 +40,7 @@ public class MilvusComInitDbExecutor implements CommandExecutor {
     this.session = session;
   }
 
-  @Override
-  public Collection<DatabasePacket> execute() throws SQLException {
+  @Override public Collection<DatabasePacket> execute() throws SQLException {
     session.setCurrentDatabase(database);
     return Collections.singletonList(MySQLResponseBuilder.buildOKPacket(0));
   }

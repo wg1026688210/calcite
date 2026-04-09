@@ -16,11 +16,12 @@
  */
 package org.apache.calcite.adapter.milvus.sql.client.handler;
 
+import org.apache.shardingsphere.database.protocol.codec.DatabasePacketCodecEngine;
+import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageCodec;
-import org.apache.shardingsphere.database.protocol.codec.DatabasePacketCodecEngine;
-import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
 import java.util.List;
 
@@ -35,13 +36,11 @@ public final class DebugPacketCodec extends ByteToMessageCodec<DatabasePacket> {
     this.engine = engine;
   }
 
-  @Override
-  protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
+  @Override protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
     engine.decode(ctx, in, out);
   }
 
-  @Override
-  protected void encode(ChannelHandlerContext ctx, DatabasePacket msg, ByteBuf out) {
+  @Override protected void encode(ChannelHandlerContext ctx, DatabasePacket msg, ByteBuf out) {
     int beforeBytes = out.writerIndex();
     engine.encode(ctx, msg, out);
     int afterBytes = out.writerIndex();

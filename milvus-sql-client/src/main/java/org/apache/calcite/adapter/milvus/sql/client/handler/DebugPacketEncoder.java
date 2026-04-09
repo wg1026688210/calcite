@@ -25,8 +25,7 @@ import io.netty.handler.codec.MessageToByteEncoder;
  */
 public class DebugPacketEncoder extends MessageToByteEncoder<ByteBuf> {
 
-  @Override
-  protected void encode(ChannelHandlerContext ctx, ByteBuf msg, ByteBuf out) throws Exception {
+  @Override protected void encode(ChannelHandlerContext ctx, ByteBuf msg, ByteBuf out) throws Exception {
     // Copy the message to output
     out.writeBytes(msg);
 

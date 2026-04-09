@@ -36,13 +36,14 @@ import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.te
 import org.apache.shardingsphere.database.protocol.mysql.payload.MySQLPacketPayload;
 import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 
 import java.sql.SQLException;
 import java.util.Collection;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Dispatches MySQL commands to appropriate executors.
@@ -53,38 +54,73 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
   private final SQLExecutor sqlExecutor;
 
   public MilvusCommandDispatcher(MilvusServerConfig config) {
-    this.sqlExecutor = new SQLExecutor(
-        config.getMilvusHost(),
+    this.sqlExecutor =
+        new SQLExecutor(config.getMilvusHost(),
         config.getMilvusPort(),
         config.getMilvusDatabase(),
         config.getMilvusUsername(),
-        config.getMilvusPassword()
-    );
+        config.getMilvusPassword());
   }
 
-  @Override
-  public void channelRead(ChannelHandlerContext ctx, Object msg) {
-    if (!(msg instanceof ByteBuf)) {
-      ctx.fireChannelRead(msg);
+  @Override public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    System.err.println("[DISPATCH] Received message type: " + msg.getClass().getName());
+
+    // Handle MySQLCommandPacket directly (from codec)
+    if (msg instanceof MySQLCommandPacket) {
+      handleCommandPacket(ctx, (MySQLCommandPacket) msg);
       return;
     }
 
-    ByteBuf buffer = (ByteBuf) msg;
+    // Handle ByteBuf (raw data from codec)
+    if (msg instanceof ByteBuf) {
+      ByteBuf buffer = (ByteBuf) msg;
 
-    // Defensive: skip empty buffers (can happen during SSL handshake)
-    if (buffer.readableBytes() == 0) {
-      buffer.release();
+      // Defensive: skip empty buffers (can happen during SSL handshake)
+      if (buffer.readableBytes() == 0) {
+        buffer.release();
+        return;
+      }
+      System.err.println("[DISPATCH] Received buffer with " + buffer.readableBytes() + " bytes");
+      try {
+        MySQLCommandPacket command = parseCommandPacket(ctx, buffer);
+        if (command != null) {
+          handleCommandPacket(ctx, command);
+        }
+      } finally {
+        buffer.release();
+      }
       return;
     }
+
+    // Forward other message types
+    ctx.fireChannelRead(msg);
+  }
+
+  /**
+   * Parses ByteBuf into MySQLCommandPacket.
+   */
+  private MySQLCommandPacket parseCommandPacket(ChannelHandlerContext ctx, ByteBuf buffer) {
     try {
-      ctx.channel().attr(org.apache.shardingsphere.database.protocol.mysql.constant.MySQLConstants.SEQUENCE_ID_ATTRIBUTE_KEY).set(new AtomicInteger());
+      MySQLPacketPayload payload =
+          new MySQLPacketPayload(buffer, ctx.channel().attr(org.apache.shardingsphere.database.protocol.constant.CommonConstants.CHARSET_ATTRIBUTE_KEY).get());
 
-      MySQLPacketPayload payload = new MySQLPacketPayload(buffer,
-          ctx.channel().attr(org.apache.shardingsphere.database.protocol.constant.CommonConstants.CHARSET_ATTRIBUTE_KEY).get());
+      int commandTypeInt = payload.readInt1();
+      MySQLCommandPacketType commandType = MySQLCommandPacketType.valueOf(commandTypeInt);
+      System.err.println("[DISPATCH] Command type: " + commandType + " (" + commandTypeInt + ")");
 
-      MySQLCommandPacketType commandType = MySQLCommandPacketType.valueOf(payload.readInt1());
-      MySQLCommandPacket command = createCommandPacket(commandType, payload);
+      return createCommandPacket(commandType, payload);
+    } catch (Exception e) {
+      System.err.println("[DISPATCH] Failed to parse command packet: " + e.getMessage());
+      e.printStackTrace();
+      return null;
+    }
+  }
 
+  /**
+   * Handles MySQLCommandPacket execution.
+   */
+  private void handleCommandPacket(ChannelHandlerContext ctx, MySQLCommandPacket command) {
+    try {
       // Debug logging
       if (command instanceof MySQLComQueryPacket) {
         String sql = ((MySQLComQueryPacket) command).getSQL();
@@ -94,18 +130,29 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
       // Execute command
       CommandExecutor executor = createExecutor(command, ctx);
       Collection<DatabasePacket> response = executor.execute();
-      AtomicInteger seqId = ctx.channel().attr(org.apache.shardingsphere.database.protocol.mysql.constant.MySQLConstants.SEQUENCE_ID_ATTRIBUTE_KEY).get();
-      System.err.println("[DEBUG] Response packets: " + response.size() + ", starting sequence ID: " + seqId.get());
-      int i = 0;
+
+      // Reset sequence ID to 1 before sending response
+      // COM_QUERY uses seq=0, response should start from seq=1
+      AtomicInteger sequenceId = new AtomicInteger(1);
+      ctx.channel().attr(org.apache.shardingsphere.database.protocol.mysql.constant.MySQLConstants.SEQUENCE_ID_ATTRIBUTE_KEY).set(sequenceId);
+      System.err.println("[DISPATCH] Reset sequence ID to 1 for response");
+
+      // Write all response packets - flush each packet separately for MySQL CLI 8.0 compatibility
+      // MySQL CLI 8.0 may not handle batched packets correctly
+      int packetCount = 0;
       for (DatabasePacket packet : response) {
-        System.err.println("[DEBUG] Writing packet [" + (i++) + "]: " + packet.getClass().getSimpleName());
-        ctx.writeAndFlush(packet).awaitUninterruptibly();
+        ctx.writeAndFlush(packet);
+        packetCount++;
+        System.err.println("[DISPATCH] Sent packet " + packetCount + ": " + packet.getClass().getSimpleName());
       }
-      System.err.println("[DEBUG] All packets written and flushed");
     } catch (SQLException e) {
+      System.err.println("[DISPATCH] SQL Error: " + e.getMessage());
       ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(e));
-    } finally {
-      buffer.release();
+    } catch (Exception e) {
+      System.err.println("[DISPATCH] Unexpected error:");
+      e.printStackTrace();
+      ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(
+          "Internal error: " + e.getMessage(), 1105, "HY000"));
     }
   }
 

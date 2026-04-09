@@ -28,12 +28,14 @@ public class ConnectionSession {
   private final Channel channel;
   private volatile String currentDatabase;
   private volatile boolean authenticated;
+  private volatile int capabilityFlags;
 
   public ConnectionSession(int connectionId, Channel channel, String defaultDatabase) {
     this.connectionId = connectionId;
     this.channel = channel;
     this.currentDatabase = defaultDatabase;
     this.authenticated = false;
+    this.capabilityFlags = 0;
   }
 
   public int getConnectionId() {
@@ -58,5 +60,13 @@ public class ConnectionSession {
 
   public void setAuthenticated(boolean authenticated) {
     this.authenticated = authenticated;
+  }
+
+  public int getCapabilityFlags() {
+    return capabilityFlags;
+  }
+
+  public void setCapabilityFlags(int capabilityFlags) {
+    this.capabilityFlags = capabilityFlags;
   }
 }

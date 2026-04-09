@@ -40,11 +40,10 @@ public class MilvusComUnsupportedExecutor implements CommandExecutor {
     this.command = command;
   }
 
-  @Override
-  public Collection<DatabasePacket> execute() throws SQLException {
+  @Override public Collection<DatabasePacket> execute() throws SQLException {
     String message = "Unknown command: " + command.getClass().getSimpleName();
-    DatabasePacket errorPacket = MySQLResponseBuilder.buildErrorPacket(
-        message, ERROR_CODE, SQL_STATE);
+    DatabasePacket errorPacket =
+        MySQLResponseBuilder.buildErrorPacket(message, ERROR_CODE, SQL_STATE);
     return Collections.singletonList(errorPacket);
   }
 }

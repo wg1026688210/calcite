@@ -30,8 +30,7 @@ import java.util.Collections;
  */
 public class MilvusComPingExecutor implements CommandExecutor {
 
-  @Override
-  public Collection<DatabasePacket> execute() throws SQLException {
+  @Override public Collection<DatabasePacket> execute() throws SQLException {
     return Collections.singletonList(MySQLResponseBuilder.buildOKPacket(0));
   }
 }

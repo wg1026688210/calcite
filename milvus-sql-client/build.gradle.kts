@@ -14,23 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 val nettyVersion = rootProject.extra["netty.version"] as String
 val mysqlConnectorVersion = rootProject.extra["mysql-connector-java.version"] as String
 val shardingsphereVersion = rootProject.extra["shardingsphere.version"] as String
 
 tasks.compileTestJava {
-  dependsOn(":milvus:compileTestJava")
+    dependsOn(":milvus:compileTestJava")
 }
 
 tasks.withType<JavaCompile> {
-  options.compilerArgs.remove("-Werror")
-  options.compilerArgs.addAll(listOf("-Xlint:-deprecation", "-Xlint:-options"))
+    options.compilerArgs.remove("-Werror")
+    options.compilerArgs.addAll(listOf("-Xlint:-deprecation", "-Xlint:-options"))
 }
 
 tasks.test {
-  // Pass mysql.driver.version to tests for version-conditional SSL tests
-  systemProperty("mysql.driver.version", rootProject.extra["mysql-connector-java.version"])
+    // Pass mysql.driver.version to tests for version-conditional SSL tests
+    systemProperty("mysql.driver.version", rootProject.extra["mysql-connector-java.version"])
 }
 
 dependencies {
@@ -49,11 +48,13 @@ dependencies {
     implementation("org.apache.shardingsphere:shardingsphere-database-protocol-core:$shardingsphereVersion")
     implementation("org.apache.shardingsphere:shardingsphere-proxy-frontend-mysql:$shardingsphereVersion")
 
-
     implementation("org.slf4j:slf4j-api")
 
     // BouncyCastle for auto SSL certificate generation (like ShardingSphere)
     implementation("org.bouncycastle:bcprov-jdk18on:1.78")
+
+    // YAML configuration support
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.0")
 
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -62,4 +63,41 @@ dependencies {
     testImplementation("mysql:mysql-connector-java:$mysqlConnectorVersion")
     testImplementation(project(":milvus"))
     testImplementation(project(path = ":milvus", configuration = "testOutput"))
+}
+
+// Fat JAR configuration
+tasks.register<Jar>("fatJar") {
+    archiveClassifier.set("all")
+    // Collect all service files manually
+    val serviceFiles = mutableMapOf<String, MutableSet<String>>()
+    configurations.runtimeClasspath.get().forEach { jar ->
+        if (jar.isFile && jar.name.endsWith(".jar")) {
+            zipTree(jar).matching { include("META-INF/services/*") }.forEach { file ->
+                val serviceName = file.name
+                val implementations = file.readLines()
+                    .filter { it.isNotBlank() && !it.startsWith("#") }
+                    .toSet()
+                serviceFiles.getOrPut(serviceName) { mutableSetOf() }.addAll(implementations)
+            }
+        }
+    }
+
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) }) {
+        exclude("META-INF/services/*")
+    }
+    with(tasks.jar.get())
+
+    // Add merged service files
+    serviceFiles.forEach { (name, implementations) ->
+        val content = implementations.joinToString("\n")
+        val serviceFile = File(temporaryDir, "META-INF/services/$name")
+        serviceFile.parentFile.mkdirs()
+        serviceFile.writeText(content)
+    }
+    from(temporaryDir)
+
+    manifest {
+        attributes["Main-Class"] = "org.apache.calcite.adapter.milvus.sql.client.MilvusMySQLServerBootstrap"
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

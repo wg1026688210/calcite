@@ -31,8 +31,7 @@ import java.util.Arrays;
  */
 public final class MySQLNativePasswordAuthenticator implements MilvusAuthenticator {
 
-  @Override
-  public boolean authenticate(String password, byte[] authResponse,
+  @Override public boolean authenticate(String password, byte[] authResponse,
       MySQLAuthenticationPluginData authPluginData) {
     if (password == null || password.isEmpty()) {
       return true;
@@ -68,8 +67,7 @@ public final class MySQLNativePasswordAuthenticator implements MilvusAuthenticat
     return result;
   }
 
-  @Override
-  public String getAuthenticationMethodName() {
+  @Override public String getAuthenticationMethodName() {
     return MySQLAuthenticationMethod.NATIVE.getMethodName();
   }
 }

@@ -25,7 +25,6 @@ import org.apache.calcite.adapter.milvus.util.TestEnvUtil;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -76,8 +75,7 @@ public class MilvusMySQLSslE2ETest extends MilvusBaseE2ETest {
    * Tests SSL connection to server.
    * NOTE: This test requires MySQL Connector/J 8.0+ driver (5.1 does not support SSL negotiation).
    */
-  @Test
-  public void testSuccessfulSslConnection() throws Exception {
+  @Test public void testSuccessfulSslConnection() throws Exception {
     String url = buildSslJdbcUrl();
     // Verify SSL connection can be established
     // Note: MySQL 8.0 driver sends initial configuration queries that may not be supported,
@@ -100,8 +98,7 @@ public class MilvusMySQLSslE2ETest extends MilvusBaseE2ETest {
   /**
    * Tests query over SSL connection.
    */
-  @Test
-  public void testSelectFromCollectionOverSsl() throws Exception {
+  @Test public void testSelectFromCollectionOverSsl() throws Exception {
     String url = buildSslJdbcUrl();
     try (Connection conn = DriverManager.getConnection(url, "root", "");
          Statement stmt = conn.createStatement();
@@ -127,14 +124,13 @@ public class MilvusMySQLSslE2ETest extends MilvusBaseE2ETest {
   /**
    * Tests complex SQL query over SSL with column metadata verification.
    */
-  @Test
-  public void testComplexQueryOverSsl() throws Exception {
+  @Test public void testComplexQueryOverSsl() throws Exception {
     String url = buildSslJdbcUrl();
     System.out.println("[SSL TEST] Testing complex SQL query over SSL...");
     try (Connection conn = DriverManager.getConnection(url, "root", "");
          Statement stmt = conn.createStatement();
-         ResultSet rs = stmt.executeQuery(
-             "SELECT book_name, book_content FROM test_ssl_collection LIMIT 5")) {
+         ResultSet rs =
+             stmt.executeQuery("SELECT book_name, book_content FROM test_ssl_collection LIMIT 5")) {
 
       // Verify column metadata
       Assertions.assertEquals("book_name", rs.getMetaData().getColumnName(1));
@@ -169,8 +165,7 @@ public class MilvusMySQLSslE2ETest extends MilvusBaseE2ETest {
   /**
    * Tests SHOW TABLES over SSL connection.
    */
-  @Test
-  public void testShowTablesOverSsl() throws Exception {
+  @Test public void testShowTablesOverSsl() throws Exception {
     String url = buildSslJdbcUrl();
     System.out.println("[SSL TEST] Testing SHOW TABLES over SSL...");
     try (Connection conn = DriverManager.getConnection(url, "root", "");
@@ -207,8 +202,7 @@ public class MilvusMySQLSslE2ETest extends MilvusBaseE2ETest {
    * This verifies backward compatibility with clients that don't support SSL.
    * NOTE: MySQL 8.0+ driver sends init queries that may fail, but connection should succeed.
    */
-  @Test
-  public void testNonSslClientToSslServer() throws Exception {
+  @Test public void testNonSslClientToSslServer() throws Exception {
     String url = buildNonSslJdbcUrl();
     // Client uses useSSL=false, server has SSL enabled
     // Connection should succeed in non-SSL mode

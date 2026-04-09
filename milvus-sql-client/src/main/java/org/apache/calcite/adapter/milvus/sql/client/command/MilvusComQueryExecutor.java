@@ -20,6 +20,7 @@ import org.apache.calcite.adapter.milvus.sql.client.executor.SQLExecutor;
 import org.apache.calcite.adapter.milvus.sql.client.response.MySQLResponseBuilder;
 import org.apache.calcite.adapter.milvus.sql.client.session.ConnectionSession;
 
+import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLCapabilityFlag;
 import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.text.query.MySQLComQueryPacket;
 import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
@@ -44,13 +45,18 @@ public class MilvusComQueryExecutor implements CommandExecutor {
     this.sqlExecutor = sqlExecutor;
   }
 
-  @Override
-  public Collection<DatabasePacket> execute() throws SQLException {
+  @Override public Collection<DatabasePacket> execute() throws SQLException {
     String trimmedSql = sql.trim();
+
+    // Check if client supports DEPRECATE_EOF (MySQL 5.7.5+)
+    int flags = session != null ? session.getCapabilityFlags() : 0;
+    boolean deprecateEof = (flags & MySQLCapabilityFlag.CLIENT_DEPRECATE_EOF.getValue()) != 0;
+    System.err.println("[DEBUG] Client capability flags: 0x" + Integer.toHexString(flags) +
+        ", DEPRECATE_EOF: " + deprecateEof);
 
     // Handle system variable queries (@@variable) for MySQL 8.0+ JDBC compatibility
     if (SystemVariableHandler.isSystemVariableQuery(trimmedSql)) {
-      return SystemVariableHandler.handle(trimmedSql);
+      return SystemVariableHandler.handle(trimmedSql, deprecateEof);
     }
 
     // Handle USE database command (MySQL JDBC sends it as COM_QUERY)
@@ -72,6 +78,7 @@ public class MilvusComQueryExecutor implements CommandExecutor {
     // Use session's current database for execution
     String currentDb = session != null ? session.getCurrentDatabase() : null;
     SQLExecutor.QueryResult result = sqlExecutor.execute(sql, currentDb);
-    return MySQLResponseBuilder.buildQueryResponse(result);
+
+    return MySQLResponseBuilder.buildQueryResponse(result, deprecateEof);
   }
 }

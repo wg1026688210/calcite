@@ -24,18 +24,15 @@ import org.apache.calcite.adapter.milvus.sql.client.response.MySQLResponseBuilde
 import org.apache.calcite.adapter.milvus.sql.client.session.ConnectionSession;
 import org.apache.calcite.adapter.milvus.sql.client.ssl.MilvusSSLRequestHandler;
 
-import org.apache.shardingsphere.database.protocol.codec.PacketCodec;
 import org.apache.shardingsphere.database.protocol.constant.CommonConstants;
-import org.apache.shardingsphere.database.protocol.mysql.codec.MySQLPacketCodecEngine;
 import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLAuthenticationMethod;
 import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLCapabilityFlag;
 import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLCharacterSets;
 import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLConnectionPhase;
 import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLConstants;
-import org.apache.shardingsphere.database.protocol.mysql.netty.MySQLSequenceIdInboundHandler;
-import org.apache.shardingsphere.database.protocol.mysql.packet.handshake.MySQLAuthenticationPluginData;
 import org.apache.shardingsphere.database.protocol.mysql.packet.handshake.MySQLAuthSwitchRequestPacket;
 import org.apache.shardingsphere.database.protocol.mysql.packet.handshake.MySQLAuthSwitchResponsePacket;
+import org.apache.shardingsphere.database.protocol.mysql.packet.handshake.MySQLAuthenticationPluginData;
 import org.apache.shardingsphere.database.protocol.mysql.packet.handshake.MySQLHandshakePacket;
 import org.apache.shardingsphere.database.protocol.mysql.packet.handshake.MySQLHandshakeResponse41Packet;
 import org.apache.shardingsphere.database.protocol.mysql.payload.MySQLPacketPayload;
@@ -43,6 +40,7 @@ import org.apache.shardingsphere.database.protocol.mysql.payload.MySQLPacketPayl
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.AttributeKey;
 
 import java.nio.charset.StandardCharsets;
@@ -69,19 +67,18 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
   private byte[] authResponse;
   private String currentUsername;
   private String currentDatabase;
+  private int clientCapabilityFlags;
 
   public MilvusAuthHandler(MilvusServerConfig config) {
     this.config = config;
     this.handshakeComplete = false;
   }
 
-  @Override
-  public void channelActive(ChannelHandlerContext ctx) throws Exception {
+  @Override public void channelActive(ChannelHandlerContext ctx) throws Exception {
     sendHandshake(ctx);
   }
 
-  @Override
-  public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+  @Override public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
     if (handshakeComplete) {
       ctx.fireChannelRead(msg);
       return;
@@ -121,8 +118,8 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
           new MilvusSSLRequestHandler());
     }
 
-    MySQLHandshakePacket handshake = new MySQLHandshakePacket(
-        connectionId, sslEnabled, authPluginData);
+    MySQLHandshakePacket handshake =
+        new MySQLHandshakePacket(connectionId, sslEnabled, authPluginData);
     MySQLAuthenticationMethod authMethod = resolveAuthMethod(config.getAuthPlugin());
     handshake.setAuthPluginName(authMethod);
 
@@ -138,6 +135,11 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
       authResponse = response.getAuthResponse();
       currentUsername = response.getUsername();
       currentDatabase = response.getDatabase();
+      clientCapabilityFlags = response.getCapabilityFlags();
+      System.err.println("[AUTH] Handshake received - user: " + currentUsername
+          + ", database: " + currentDatabase
+          + ", authResponse length: " + (authResponse != null ? authResponse.length : 0)
+          + ", capabilityFlags: 0x" + Integer.toHexString(clientCapabilityFlags));
 
       setMultiStatementsOption(ctx, response);
       setCharacterSet(ctx, response);
@@ -153,7 +155,10 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
 
       completeAuthentication(ctx, authenticator);
     } catch (Exception e) {
-      ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(
+      System.err.println("[AUTH] Exception during handshake processing:");
+      e.printStackTrace();
+      ctx.writeAndFlush(
+          MySQLResponseBuilder.buildErrorPacket(
           "Access denied: " + e.getMessage(), 1045, "28000"));
       ctx.close();
     }
@@ -168,7 +173,8 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
       authResponse = response.getAuthPluginResponse();
       completeAuthentication(ctx, createAuthenticator(config.getAuthPlugin()));
     } catch (Exception e) {
-      ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(
+      ctx.writeAndFlush(
+          MySQLResponseBuilder.buildErrorPacket(
           "Access denied: " + e.getMessage(), 1045, "28000"));
       ctx.close();
     }
@@ -179,32 +185,53 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
    */
   private void completeAuthentication(ChannelHandlerContext ctx,
       MilvusAuthenticator authenticator) {
-    String configuredUsername = config.getMilvusUsername();
-    String configuredPassword = config.getMilvusPassword();
+    // MySQL protocol authentication (separate from Milvus backend credentials)
+    String configuredUsername = config.getMysqlUsername();
+    String configuredPassword = config.getMysqlPassword();
 
+    System.err.println("[AUTH] Authenticating user: " + currentUsername + ", expected: " + configuredUsername);
     if (configuredUsername != null && !configuredUsername.isEmpty()) {
       if (!configuredUsername.equals(currentUsername)) {
-        ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(
+        System.err.println("[AUTH] Username mismatch: " + currentUsername + " != " + configuredUsername);
+        ctx.writeAndFlush(
+            MySQLResponseBuilder.buildErrorPacket(
             "Access denied for user '" + currentUsername + "'", 1045, "28000"));
         ctx.close();
         return;
       }
+      System.err.println("[AUTH] Validating password...");
       if (!authenticator.authenticate(configuredPassword, authResponse, authPluginData)) {
-        ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(
+        System.err.println("[AUTH] Password validation failed");
+        ctx.writeAndFlush(
+            MySQLResponseBuilder.buildErrorPacket(
             "Access denied for user '" + currentUsername + "'", 1045, "28000"));
         ctx.close();
         return;
       }
+      System.err.println("[AUTH] Password validated successfully");
     }
 
-    ConnectionSession session = new ConnectionSession(
-        connectionId, ctx.channel(),
+    ConnectionSession session =
+        new ConnectionSession(connectionId, ctx.channel(),
         currentDatabase != null ? currentDatabase : config.getMilvusDatabase());
     session.setAuthenticated(true);
+    // Mask out unsupported capability flags to prevent protocol issues
+    // CLIENT_SESSION_TRACK (0x800000) requires special OK packet format
+    // CLIENT_QUERY_ATTRIBUTES (0x8000000) and MFA (0x10000000) not supported
+    // Note: Keep CLIENT_DEPRECATE_EOF as-is to respect client preference
+    int maskedCapabilityFlags = clientCapabilityFlags
+        & ~0x00800000  // CLIENT_SESSION_TRACK
+        & ~0x08000000  // CLIENT_QUERY_ATTRIBUTES
+        & ~0x10000000; // MULTI_FACTOR_AUTHENTICATION
+    session.setCapabilityFlags(maskedCapabilityFlags);
     ctx.channel().attr(SESSION_KEY).set(session);
+    System.err.println("[AUTH] Authentication complete, session created for: " + currentUsername);
 
-    ctx.writeAndFlush(MySQLResponseBuilder.buildOKPacket(0));
+    // Set handshakeComplete BEFORE write to avoid race condition
+    // Client may send next packet immediately after receiving OK
     handshakeComplete = true;
+    ctx.writeAndFlush(MySQLResponseBuilder.buildOKPacket(0));
+    System.err.println("[AUTH] OK packet sent, handshake complete");
   }
 
   private boolean shouldAuthSwitch(MySQLHandshakeResponse41Packet response,
@@ -265,9 +292,32 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
     return MySQLAuthenticationMethod.NATIVE;
   }
 
-  @Override
-  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+  @Override public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
     cause.printStackTrace();
     ctx.close();
+  }
+
+  @Override public void userEventTriggered(ChannelHandlerContext ctx, Object event) throws Exception {
+    if (event instanceof IdleStateEvent) {
+      ConnectionSession session = ctx.channel().attr(SESSION_KEY).get();
+      int connectionId = session != null ? session.getConnectionId() : -1;
+      String database = session != null ? session.getCurrentDatabase() : "NONE";
+
+      System.err.println("[MilvusAuthHandler] Connection " + connectionId
+          + " idle timeout after " + config.getIdleTimeoutSeconds()
+          + "s, closing. database: " + database);
+      ctx.close();
+      return;
+    }
+    super.userEventTriggered(ctx, event);
+  }
+
+  @Override public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    ConnectionSession session = ctx.channel().attr(SESSION_KEY).get();
+    if (session != null) {
+      System.err.println("[MilvusAuthHandler] Connection " + session.getConnectionId() + " closed");
+      ctx.channel().attr(SESSION_KEY).set(null);
+    }
+    ctx.fireChannelInactive();
   }
 }

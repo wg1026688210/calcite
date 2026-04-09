@@ -26,8 +26,7 @@ import org.apache.shardingsphere.database.protocol.mysql.packet.handshake.MySQLA
  */
 public final class MySQLClearPasswordAuthenticator implements MilvusAuthenticator {
 
-  @Override
-  public boolean authenticate(String password, byte[] authResponse,
+  @Override public boolean authenticate(String password, byte[] authResponse,
       MySQLAuthenticationPluginData authPluginData) {
     if (password == null || password.isEmpty()) {
       return true;
@@ -40,8 +39,7 @@ public final class MySQLClearPasswordAuthenticator implements MilvusAuthenticato
     return password.equals(new String(clientPassword));
   }
 
-  @Override
-  public String getAuthenticationMethodName() {
+  @Override public String getAuthenticationMethodName() {
     return MySQLAuthenticationMethod.CLEAR_TEXT.getMethodName();
   }
 }

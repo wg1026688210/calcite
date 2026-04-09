@@ -207,7 +207,8 @@ public class SQLExecutor {
 
     List<ColumnInfo> columns = new ArrayList<>();
     for (int i = 1; i <= columnCount; i++) {
-      columns.add(new ColumnInfo(
+      columns.add(
+          new ColumnInfo(
           metaData.getColumnName(i),
           metaData.getColumnLabel(i),
           metaData.getSchemaName(i),
@@ -215,8 +216,7 @@ public class SQLExecutor {
           metaData.getColumnType(i),
           metaData.getColumnTypeName(i),
           metaData.getColumnDisplaySize(i),
-          metaData.getScale(i)
-      ));
+          metaData.getScale(i)));
     }
 
     List<List<Object>> rows = new ArrayList<>();

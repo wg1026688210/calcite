@@ -45,12 +45,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @DisplayName("MilvusAuthHandler tests")
 class MilvusAuthHandlerTest {
 
-  @Test
-  @DisplayName("Should authenticate successfully with correct credentials")
+  @Test @DisplayName("Should authenticate successfully with correct credentials")
   void testSuccessfulAuthentication() {
     MilvusServerConfig config = new MilvusServerConfig();
-    config.setMilvusUsername("root");
-    config.setMilvusPassword("secret");
+    config.setMysqlUsername("root");
+    config.setMysqlPassword("secret");
     config.setAuthPlugin("mysql_clear_password");
 
     EmbeddedChannel channel = new EmbeddedChannel(new MilvusAuthHandler(config));
@@ -60,8 +59,8 @@ class MilvusAuthHandlerTest {
     assertTrue(handshake instanceof MySQLHandshakePacket);
 
     // Build handshake response with correct password
-    ByteBuf responseBuf = buildClearTextHandshakeResponse(
-        "root", "secret", "test_db", "mysql_clear_password");
+    ByteBuf responseBuf =
+        buildClearTextHandshakeResponse("root", "secret", "test_db", "mysql_clear_password");
     channel.writeInbound(responseBuf);
 
     Object response = channel.readOutbound();
@@ -73,12 +72,11 @@ class MilvusAuthHandlerTest {
     assertEquals("test_db", session.getCurrentDatabase());
   }
 
-  @Test
-  @DisplayName("Should reject authentication with wrong password")
+  @Test @DisplayName("Should reject authentication with wrong password")
   void testFailedAuthentication() {
     MilvusServerConfig config = new MilvusServerConfig();
-    config.setMilvusUsername("root");
-    config.setMilvusPassword("secret");
+    config.setMysqlUsername("root");
+    config.setMysqlPassword("secret");
     config.setAuthPlugin("mysql_clear_password");
 
     EmbeddedChannel channel = new EmbeddedChannel(new MilvusAuthHandler(config));
@@ -87,20 +85,19 @@ class MilvusAuthHandlerTest {
     channel.readOutbound();
 
     // Build handshake response with wrong password
-    ByteBuf responseBuf = buildClearTextHandshakeResponse(
-        "root", "wrong", "test_db", "mysql_clear_password");
+    ByteBuf responseBuf =
+        buildClearTextHandshakeResponse("root", "wrong", "test_db", "mysql_clear_password");
     channel.writeInbound(responseBuf);
 
     // Expect channel to be closed
     assertFalse(channel.isOpen());
   }
 
-  @Test
-  @DisplayName("Should perform auth switch when plugin mismatches")
+  @Test @DisplayName("Should perform auth switch when plugin mismatches")
   void testAuthSwitchOnPluginMismatch() {
     MilvusServerConfig config = new MilvusServerConfig();
-    config.setMilvusUsername("root");
-    config.setMilvusPassword("secret");
+    config.setMysqlUsername("root");
+    config.setMysqlPassword("secret");
     config.setAuthPlugin("mysql_native_password");
 
     EmbeddedChannel channel = new EmbeddedChannel(new MilvusAuthHandler(config));
@@ -110,8 +107,8 @@ class MilvusAuthHandlerTest {
     MySQLAuthenticationPluginData authPluginData = handshake.getAuthPluginData();
 
     // Build handshake response with mismatched plugin and empty auth response
-    ByteBuf responseBuf = buildNativeHandshakeResponse(
-        "root", new byte[0], "test_db", "mysql_clear_password");
+    ByteBuf responseBuf =
+        buildNativeHandshakeResponse("root", new byte[0], "test_db", "mysql_clear_password");
     channel.writeInbound(responseBuf);
 
     Object switchPacket = channel.readOutbound();
@@ -166,7 +163,7 @@ class MilvusAuthHandlerTest {
     payload.writeStringNul(username);
 
     if (0 != (capabilityFlags & MySQLCapabilityFlag.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA.getValue())) {
-      payload.writeBytes(authResponse);
+      payload.writeBytesLenenc(authResponse);
     } else if (0 != (capabilityFlags & MySQLCapabilityFlag.CLIENT_SECURE_CONNECTION.getValue())) {
       payload.writeInt1(authResponse.length);
       payload.writeBytes(authResponse);
@@ -203,5 +200,69 @@ class MilvusAuthHandlerTest {
     } catch (NoSuchAlgorithmException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  @Test
+  @DisplayName("Should handle MySQL CLI capability flags with CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA")
+  void testMySQLCLICapabilityFlags() {
+    MilvusServerConfig config = new MilvusServerConfig();
+    config.setMilvusUsername("root");
+    config.setMilvusPassword("secret");
+    config.setAuthPlugin("mysql_clear_password");
+
+    EmbeddedChannel channel = new EmbeddedChannel(new MilvusAuthHandler(config));
+
+    // Consume handshake
+    channel.readOutbound();
+
+    // Build handshake response with MySQL CLI capabilities (0x19bfa285)
+    // This includes CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA (0x200000)
+    int mysqlCLIFlags = 0x19bfa285;
+    ByteBuf responseBuf =
+        buildHandshakeResponseWithFlags("root", "secret", "test_db", "mysql_clear_password", mysqlCLIFlags);
+    channel.writeInbound(responseBuf.copy());
+
+    Object response = channel.readOutbound();
+    System.err.println("Response type: " + (response != null ? response.getClass().getName() : "null"));
+
+    // Should be OK packet, not error
+    assertTrue(response instanceof MySQLOKPacket,
+        "Expected OK packet but got: " + (response != null ? response.getClass().getName() : "null"));
+
+    ConnectionSession session = channel.attr(MilvusAuthHandler.SESSION_KEY).get();
+    assertNotNull(session);
+    assertTrue(session.isAuthenticated());
+  }
+
+  private ByteBuf buildHandshakeResponseWithFlags(String username, String password,
+      String database, String authPluginName, int capabilityFlags) {
+    byte[] authResponse = new byte[password.length() + 1];
+    System.arraycopy(password.getBytes(StandardCharsets.UTF_8), 0, authResponse, 0, password.length());
+
+    ByteBuf buf = Unpooled.buffer();
+    MySQLPacketPayload payload = new MySQLPacketPayload(buf, StandardCharsets.UTF_8);
+    payload.writeInt4(capabilityFlags);
+    payload.writeInt4(16777215);
+    payload.writeInt1(33); // UTF8
+    payload.writeReserved(23);
+    payload.writeStringNul(username);
+
+    // Auth response with CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
+    if (0 != (capabilityFlags & MySQLCapabilityFlag.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA.getValue())) {
+      payload.writeBytesLenenc(authResponse);
+    } else if (0 != (capabilityFlags & MySQLCapabilityFlag.CLIENT_SECURE_CONNECTION.getValue())) {
+      payload.writeInt1(authResponse.length);
+      payload.writeBytes(authResponse);
+    } else {
+      payload.writeStringNul(new String(authResponse, StandardCharsets.UTF_8));
+    }
+
+    if (0 != (capabilityFlags & MySQLCapabilityFlag.CLIENT_CONNECT_WITH_DB.getValue())) {
+      payload.writeStringNul(database);
+    }
+    if (0 != (capabilityFlags & MySQLCapabilityFlag.CLIENT_PLUGIN_AUTH.getValue())) {
+      payload.writeStringNul(authPluginName);
+    }
+    return buf;
   }
 }

@@ -16,14 +16,14 @@
  */
 package org.apache.calcite.adapter.milvus.sql.client.ssl;
 
+import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLCapabilityFlag;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.ssl.SslHandler;
-import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLCapabilityFlag;
 
 import java.util.List;
-
 import javax.net.ssl.SSLEngine;
 
 /**
@@ -38,8 +38,7 @@ public final class MilvusSSLRequestHandler extends ByteToMessageDecoder {
     setSingleDecode(true);
   }
 
-  @Override
-  protected void decode(ChannelHandlerContext context, ByteBuf in, List<Object> out) {
+  @Override protected void decode(ChannelHandlerContext context, ByteBuf in, List<Object> out) {
     if (in.readableBytes() < HEADER_LENGTH
         || in.readableBytes() < HEADER_LENGTH + in.getUnsignedMediumLE(in.readerIndex())) {
       return;

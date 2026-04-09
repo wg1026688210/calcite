@@ -21,9 +21,9 @@ import org.apache.shardingsphere.database.protocol.mysql.packet.handshake.MySQLA
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,8 +33,7 @@ class MySQLNativePasswordAuthenticatorTest {
 
   private final MySQLNativePasswordAuthenticator authenticator = new MySQLNativePasswordAuthenticator();
 
-  @Test
-  @DisplayName("Should return true for correct password")
+  @Test @DisplayName("Should return true for correct password")
   void shouldAuthenticateCorrectPassword() {
     String password = "secret";
     MySQLAuthenticationPluginData authPluginData = new MySQLAuthenticationPluginData();
@@ -42,8 +41,7 @@ class MySQLNativePasswordAuthenticatorTest {
     assertTrue(authenticator.authenticate(password, authResponse, authPluginData));
   }
 
-  @Test
-  @DisplayName("Should return false for wrong password")
+  @Test @DisplayName("Should return false for wrong password")
   void shouldRejectWrongPassword() {
     String password = "secret";
     MySQLAuthenticationPluginData authPluginData = new MySQLAuthenticationPluginData();
@@ -51,8 +49,7 @@ class MySQLNativePasswordAuthenticatorTest {
     assertFalse(authenticator.authenticate(password, authResponse, authPluginData));
   }
 
-  @Test
-  @DisplayName("Should return true when configured password is empty")
+  @Test @DisplayName("Should return true when configured password is empty")
   void shouldAllowEmptyPassword() {
     MySQLAuthenticationPluginData authPluginData = new MySQLAuthenticationPluginData();
     assertTrue(authenticator.authenticate("", new byte[20], authPluginData));

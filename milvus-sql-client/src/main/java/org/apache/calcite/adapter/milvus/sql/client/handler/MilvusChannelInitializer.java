@@ -25,13 +25,15 @@ import org.apache.shardingsphere.database.protocol.mysql.netty.MySQLSequenceIdIn
 
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.timeout.IdleStateHandler;
 
 import java.nio.charset.StandardCharsets;
 
 /**
  * Initializes the channel pipeline for MySQL protocol handling.
- * Sets up the 6-layer architecture:
- * 1. Protocol Layer: ShardingSphere codec
+ *
+ * <p>Pipeline structure:
+ * 1. Protocol Layer: ShardingSphere codec (PacketCodec + MySQLSequenceIdInboundHandler)
  * 2. Authentication Layer: MilvusAuthHandler
  * 3. Command Layer: MilvusCommandDispatcher
  */
@@ -43,19 +45,22 @@ public class MilvusChannelInitializer extends ChannelInitializer<SocketChannel> 
     this.config = config;
   }
 
-  @Override
-  protected void initChannel(SocketChannel ch) {
+  @Override protected void initChannel(SocketChannel ch) {
     ch.attr(CommonConstants.CHARSET_ATTRIBUTE_KEY).set(StandardCharsets.UTF_8);
 
     ch.pipeline()
-        // Layer 2: Protocol Layer - ShardingSphere MySQL codec
+        // Layer 1: Protocol Layer - ShardingSphere MySQL codec
         .addLast(new PacketCodec(new MySQLPacketCodecEngine()))
+        // ShardingSphere manages sequence ID automatically
         .addLast(new MySQLSequenceIdInboundHandler(ch))
 
-        // Layer 3: Authentication Layer
+        // Idle detection: close connection if no read/write for specified seconds
+        .addLast(new IdleStateHandler(0, 0, config.getIdleTimeoutSeconds()))
+
+        // Layer 2: Authentication Handler
         .addLast(new MilvusAuthHandler(config))
 
-        // Layer 4: Command Dispatch Layer
+        // Layer 3: Command Dispatcher
         .addLast(new MilvusCommandDispatcher(config));
   }
 }

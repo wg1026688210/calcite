@@ -18,6 +18,7 @@ package org.apache.calcite.adapter.milvus.sql.client;
 
 import org.apache.calcite.adapter.milvus.sql.client.executor.SQLExecutor;
 import org.apache.calcite.adapter.milvus.sql.client.response.MySQLResponseBuilder;
+
 import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
 import org.junit.jupiter.api.Test;
@@ -35,8 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 public class MySQLProtocolUnitTest {
 
-  @Test
-  public void testShowVariablesResponse() {
+  @Test public void testShowVariablesResponse() {
     // Create a QueryResult similar to what SHOW VARIABLES returns
     List<SQLExecutor.ColumnInfo> columns = new ArrayList<>();
     columns.add(new SQLExecutor.ColumnInfo("Variable_name", Types.VARCHAR, "VARCHAR"));
@@ -67,8 +67,7 @@ public class MySQLProtocolUnitTest {
     assertEquals("MySQLEofPacket", packetTypes.get(5));
   }
 
-  @Test
-  public void testEmptyResultSetResponse() {
+  @Test public void testEmptyResultSetResponse() {
     // Create an empty QueryResult
     List<SQLExecutor.ColumnInfo> columns = new ArrayList<>();
     columns.add(new SQLExecutor.ColumnInfo("id", Types.INTEGER, "INTEGER"));
@@ -95,8 +94,7 @@ public class MySQLProtocolUnitTest {
     assertEquals("MySQLEofPacket", packetTypes.get(3));
   }
 
-  @Test
-  public void testUpdateResponse() {
+  @Test public void testUpdateResponse() {
     // Create a non-QueryResult (update count)
     SQLExecutor.QueryResult result = new SQLExecutor.QueryResult(new ArrayList<>(), new ArrayList<>(), 5);
 

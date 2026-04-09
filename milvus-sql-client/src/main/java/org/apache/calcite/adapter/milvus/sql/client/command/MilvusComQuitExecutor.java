@@ -36,8 +36,7 @@ public class MilvusComQuitExecutor implements CommandExecutor {
     this.ctx = ctx;
   }
 
-  @Override
-  public Collection<DatabasePacket> execute() throws SQLException {
+  @Override public Collection<DatabasePacket> execute() throws SQLException {
     // Close the connection gracefully
     ctx.close();
     // Return empty list - no response for QUIT command

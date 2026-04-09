@@ -19,6 +19,7 @@ package org.apache.calcite.adapter.milvus.sql.client.response;
 import org.apache.calcite.adapter.milvus.sql.client.executor.SQLExecutor;
 
 import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLBinaryColumnType;
+import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLCapabilityFlag;
 import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.MySQLColumnDefinition41Packet;
 import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.MySQLFieldCountPacket;
 import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.text.MySQLTextResultSetRowPacket;
@@ -39,19 +40,62 @@ import java.util.List;
  */
 public final class MySQLResponseBuilder {
 
+  // MySQL Status Flags - based on ShardingSphere MySQLStatusFlag enum
+  private static final int SERVER_STATUS_IN_TRANS = 0x0001;
   private static final int SERVER_STATUS_AUTOCOMMIT = 0x0002;
+  private static final int SERVER_MORE_RESULTS_EXISTS = 0x0008;
+  private static final int SERVER_STATUS_NO_GOOD_INDEX_USED = 0x0010;
+  private static final int SERVER_STATUS_NO_INDEX_USED = 0x0020;
+  private static final int SERVER_STATUS_METADATA_CHANGED = 0x0400;
+
   private static final int CHARSET_UTF8MB4 = 45;
   private static final String SCHEMA_DEF = "def";
+
+  // Default status flags: AUTOCOMMIT enabled, not in transaction
+  private static final int DEFAULT_STATUS_FLAGS = SERVER_STATUS_AUTOCOMMIT;
 
   private MySQLResponseBuilder() {
     // utility class
   }
 
   /**
+   * Calculates server status flags.
+   * Based on ShardingSphere ServerStatusFlagCalculator.
+   *
+   * @param autoCommit whether autocommit is enabled (default: true)
+   * @param inTransaction whether in transaction (default: false)
+   * @param moreResultsExist whether more results exist (default: false)
+   * @return calculated status flags
+   */
+  public static int calculateStatusFlags(boolean autoCommit, boolean inTransaction, boolean moreResultsExist) {
+    int result = 0;
+    result |= autoCommit ? SERVER_STATUS_AUTOCOMMIT : 0;
+    result |= inTransaction ? SERVER_STATUS_IN_TRANS : 0;
+    result |= moreResultsExist ? SERVER_MORE_RESULTS_EXISTS : 0;
+    return result;
+  }
+
+  /**
+   * Calculates default status flags (autocommit=ON, not in transaction, no more results).
+   */
+  public static int calculateStatusFlags() {
+    return calculateStatusFlags(true, false, false);
+  }
+
+  /**
    * Builds a query response from SQL execution result.
-   * Returns: field count + column definitions + EOF + rows + EOF packet
+   * Returns: field count + column definitions + (EOF or OK) + rows + (EOF or OK) packet
+   * MySQL 5.7.5+ uses OK instead of EOF when CLIENT_DEPRECATE_EOF is set
    */
   public static Collection<DatabasePacket> buildQueryResponse(SQLExecutor.QueryResult result) {
+    return buildQueryResponse(result, false); // Default to EOF for backward compatibility
+  }
+
+  /**
+   * Builds a query response with client capability awareness.
+   * @param deprecateEof true if CLIENT_DEPRECATE_EOF is set (MySQL 5.7.5+)
+   */
+  public static Collection<DatabasePacket> buildQueryResponse(SQLExecutor.QueryResult result, boolean deprecateEof) {
     List<DatabasePacket> packets = new ArrayList<>();
 
     if (!result.isResultSet()) {
@@ -69,8 +113,13 @@ public final class MySQLResponseBuilder {
       packets.add(createColumnDefinitionPacket(column));
     }
 
-    // 3. EOF packet after column definitions (required for MySQL 5.1 compatibility)
-    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
+    // 3. After column definitions: EOF (old) or nothing (new with DEPRECATE_EOF)
+    int statusFlags = calculateStatusFlags();
+    if (!deprecateEof) {
+      // Only send EOF when DEPRECATE_EOF is NOT set
+      packets.add(new MySQLEofPacket(0, statusFlags));
+    }
+    // When DEPRECATE_EOF is set, NO intermediate packet is sent after column definitions
 
     // 4. Row data packets - handle null values
     for (List<Object> row : result.getRows()) {
@@ -81,10 +130,11 @@ public final class MySQLResponseBuilder {
       packets.add(new MySQLTextResultSetRowPacket(safeRow));
     }
 
-    // 5. Final EOF packet
-    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
+    // 5. Final: Always use EOF for maximum compatibility
+    // MySQL CLI 8.0 may have issues with OK packet in result set
+    packets.add(new MySQLEofPacket(0, statusFlags));
 
-    System.err.println("[RESPONSE] Built query response:");
+    System.err.println("[RESPONSE] Built query response (deprecateEof=" + deprecateEof + "):");
     System.err.println("[RESPONSE]   Columns: " + result.getColumns().size());
     System.err.println("[RESPONSE]   Rows: " + result.getRows().size());
     System.err.println("[RESPONSE]   Packets: " + packets.size());
@@ -99,7 +149,14 @@ public final class MySQLResponseBuilder {
    * Builds an OK packet for successful operations.
    */
   public static DatabasePacket buildOKPacket(int affectedRows) {
-    return new MySQLOKPacket(affectedRows, 0, SERVER_STATUS_AUTOCOMMIT);
+    return new MySQLOKPacket(affectedRows, 0, calculateStatusFlags(), 0, "");
+  }
+
+  /**
+   * Builds an OK packet for successful operations with custom status flags.
+   */
+  public static DatabasePacket buildOKPacket(int affectedRows, int statusFlags) {
+    return new MySQLOKPacket(affectedRows, 0, statusFlags, 0, "");
   }
 
   /**
@@ -130,26 +187,60 @@ public final class MySQLResponseBuilder {
   /**
    * Creates a column definition packet from column info.
    */
+  // MySQL Column Definition Flags - from MySQLColumnDefinitionFlag enum
+  private static final int FLAG_NOT_NULL = 0x0001;
+  private static final int FLAG_UNSIGNED = 0x0020;
+
   private static DatabasePacket createColumnDefinitionPacket(SQLExecutor.ColumnInfo column) {
     MySQLBinaryColumnType columnType = mapSqlTypeToMySQLType(column.getSqlType());
-    String schemaName = column.getSchemaName() == null || column.getSchemaName().isEmpty()
-        ? "def" : column.getSchemaName();
-    String tableName = column.getTableName() == null ? "" : column.getTableName();
+    // Use empty strings for all optional fields to match native MySQL behavior
+    // - schema: native MySQL uses empty string (1 byte: 0x00) instead of "def" (4 bytes)
+    // - table/orgTable: empty string (1 byte each) instead of actual names
+    // - orgName: empty string (1 byte) instead of repeating column name
+    // This reduces packet size from ~59 bytes to ~37 bytes
+    String schemaName = "";
+    String tableName = "";
+    String orgTableName = "";
+    String orgColumnName = "";
     String columnLabel = column.getLabel() == null || column.getLabel().isEmpty()
         ? column.getName() : column.getLabel();
 
+    // Calculate flags - set NOT_NULL for all columns, UNSIGNED for numeric types
+    int flags = FLAG_NOT_NULL;
+    if (isUnsignedType(column.getSqlType())) {
+      flags |= FLAG_UNSIGNED;
+    }
+
+    // Ensure columnLength is never 0 (use 255 as default, matching ShardingSphere behavior)
+    int columnLength = column.getDisplaySize();
+    if (columnLength <= 0) {
+      columnLength = 255;
+    }
+
     return new MySQLColumnDefinition41Packet(
         CHARSET_UTF8MB4,
-        schemaName,
-        tableName,
-        tableName,
-        columnLabel,
-        column.getName(),
-        column.getDisplaySize(),
+        flags,
+        schemaName,      // schema - empty for result set metadata
+        tableName,       // table - empty
+        orgTableName,    // orgTable - empty (not "tableName")
+        columnLabel,     // name - the actual column label/name
+        orgColumnName,   // orgName - empty (not repeating column name)
+        columnLength,
         columnType,
         column.getDecimals(),
-        false
-    );
+        false);
+  }
+
+  private static boolean isUnsignedType(int sqlType) {
+    switch (sqlType) {
+      case java.sql.Types.TINYINT:
+      case java.sql.Types.SMALLINT:
+      case java.sql.Types.INTEGER:
+      case java.sql.Types.BIGINT:
+        return true;
+      default:
+        return false;
+    }
   }
 
   /**
@@ -201,15 +292,38 @@ public final class MySQLResponseBuilder {
    */
   public static Collection<DatabasePacket> buildVariableQueryResponse(
       java.util.Map<String, String> variables) {
+    return buildVariableQueryResponse(variables, false);
+  }
+
+  /**
+   * Builds response for variable query (SELECT @@variable).
+   * @param deprecateEof true if CLIENT_DEPRECATE_EOF is set (MySQL 5.7.5+)
+   */
+  public static Collection<DatabasePacket> buildVariableQueryResponse(
+      java.util.Map<String, String> variables, boolean deprecateEof) {
+    return buildVariableQueryResponse(variables, deprecateEof, null);
+  }
+
+  public static Collection<DatabasePacket> buildVariableQueryResponse(
+      java.util.Map<String, String> variables, boolean deprecateEof, String columnName) {
     List<DatabasePacket> packets = new ArrayList<>();
+
+    // Use first variable name as column name, or default to "@@variable"
+    String colName = columnName;
+    if (colName == null || colName.isEmpty()) {
+      colName = variables.isEmpty() ? "@@variable" : "@@" + variables.keySet().iterator().next();
+    }
 
     // Single column result with variable value
     packets.add(new MySQLFieldCountPacket(1));
-    packets.add(new MySQLColumnDefinition41Packet(
-        CHARSET_UTF8MB4, SCHEMA_DEF, "", "",
-        "@@variable", "@@variable", 255,
+    packets.add(
+        new MySQLColumnDefinition41Packet(
+        CHARSET_UTF8MB4, FLAG_NOT_NULL, "", "", "",
+        colName, "", 1024,
         MySQLBinaryColumnType.VARCHAR, 0, false));
-    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
+    int statusFlags = calculateStatusFlags();
+    // Always use EOF for maximum compatibility
+    packets.add(new MySQLEofPacket(0, statusFlags));
 
     // Add row with concatenated values if multiple variables
     StringBuilder value = new StringBuilder();
@@ -221,7 +335,8 @@ public final class MySQLResponseBuilder {
     row.add(value.toString());
     packets.add(new MySQLTextResultSetRowPacket(row));
 
-    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
+    // Always use EOF for maximum compatibility
+    packets.add(new MySQLEofPacket(0, statusFlags));
     return packets;
   }
 
@@ -230,19 +345,32 @@ public final class MySQLResponseBuilder {
    */
   public static Collection<DatabasePacket> buildShowVariablesResponse(
       java.util.Map<String, String> variables) {
+    return buildShowVariablesResponse(variables, false);
+  }
+
+  /**
+   * Builds response for SHOW VARIABLES query.
+   * @param deprecateEof true if CLIENT_DEPRECATE_EOF is set (MySQL 5.7.5+)
+   */
+  public static Collection<DatabasePacket> buildShowVariablesResponse(
+      java.util.Map<String, String> variables, boolean deprecateEof) {
     List<DatabasePacket> packets = new ArrayList<>();
 
     // Two columns: Variable_name, Value
     packets.add(new MySQLFieldCountPacket(2));
-    packets.add(new MySQLColumnDefinition41Packet(
-        CHARSET_UTF8MB4, SCHEMA_DEF, "", "",
-        "Variable_name", "Variable_name", 64,
-        MySQLBinaryColumnType.VARCHAR, 0, false));
-    packets.add(new MySQLColumnDefinition41Packet(
-        CHARSET_UTF8MB4, SCHEMA_DEF, "", "",
-        "Value", "Value", 255,
-        MySQLBinaryColumnType.VARCHAR, 0, false));
-    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
+    packets.add(
+        new MySQLColumnDefinition41Packet(
+            CHARSET_UTF8MB4, FLAG_NOT_NULL, "", "", "",
+            "Variable_name", "", 64,
+            MySQLBinaryColumnType.VARCHAR, 0, false));
+    packets.add(
+        new MySQLColumnDefinition41Packet(
+            CHARSET_UTF8MB4, FLAG_NOT_NULL, "", "", "",
+            "Value", "", 1024,
+            MySQLBinaryColumnType.VARCHAR, 0, false));
+    int statusFlags = calculateStatusFlags();
+    // Always use EOF for maximum compatibility
+    packets.add(new MySQLEofPacket(0, statusFlags));
 
     // Add rows
     for (java.util.Map.Entry<String, String> entry : variables.entrySet()) {
@@ -252,7 +380,8 @@ public final class MySQLResponseBuilder {
       packets.add(new MySQLTextResultSetRowPacket(row));
     }
 
-    packets.add(new MySQLEofPacket(SERVER_STATUS_AUTOCOMMIT));
+    // Always use EOF for maximum compatibility
+    packets.add(new MySQLEofPacket(0, statusFlags));
     return packets;
   }
 }
