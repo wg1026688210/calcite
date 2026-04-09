@@ -46,7 +46,7 @@ import java.util.Map;
 @ExtendWith(MilvusExtension.class)
 public class MultiDatabaseE2ETest extends MilvusBaseE2ETest {
 
-  private static final int MYSQL_PORT = 13309;
+  private static final int MYSQL_PORT = 13311;
   private static final String DB1_NAME = "db1";
   private static final String DB2_NAME = "db2";
   private static final String DB1_COLLECTION = "db1_books";

@@ -60,6 +60,8 @@ public class MilvusMySQLAuthE2ETest extends MilvusBaseE2ETest {
     config.setMilvusDatabase("default");
     config.setMilvusUsername(TEST_USER);
     config.setMilvusPassword(TEST_PASSWORD);
+    config.setMysqlUsername(TEST_USER);  // Set MySQL auth credentials
+    config.setMysqlPassword(TEST_PASSWORD);
     config.setAuthPlugin("mysql_native_password");
 
     server = new MilvusMySQLServer(config);
