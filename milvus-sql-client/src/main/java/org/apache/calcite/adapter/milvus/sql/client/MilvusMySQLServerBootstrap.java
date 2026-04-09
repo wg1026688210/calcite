@@ -19,10 +19,15 @@ package org.apache.calcite.adapter.milvus.sql.client;
 import org.apache.calcite.adapter.milvus.sql.client.config.ConfigLoader;
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
 import org.apache.calcite.adapter.milvus.sql.client.server.MilvusMySQLServer;
+import org.apache.shardingsphere.database.protocol.constant.DatabaseProtocolServerInfo;
 
 public class MilvusMySQLServerBootstrap {
 
   public static void main(String[] args) throws Exception {
+    // Set MySQL protocol version to 8.0.30 for MySQL CLI 8.0+ compatibility
+    // This prevents CLI from entering 5.7 compatibility mode and sending incompatible queries
+    DatabaseProtocolServerInfo.setProtocolVersion("MySQL", "8.0.30");
+
     // Load configuration from YAML file or use defaults
     MilvusServerConfig config;
     if (args.length > 0) {
