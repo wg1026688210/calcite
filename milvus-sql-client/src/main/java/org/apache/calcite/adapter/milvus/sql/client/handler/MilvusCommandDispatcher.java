@@ -134,14 +134,15 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
       // - MySQLSequenceIdInboundHandler reads client packet seq and sets to seq+1
       // - MySQLPacketCodecEngine uses getAndIncrement() for each outgoing packet
 
-      // Write all response packets - flush each packet separately for MySQL CLI 8.0 compatibility
-      // MySQL CLI 8.0 may not handle batched packets correctly
+      // Write all response packets - use write() to collect, then single flush()
+      // This allows Netty to merge packets into fewer TCP segments
       int packetCount = 0;
       for (DatabasePacket packet : response) {
-        ctx.writeAndFlush(packet);
+        ctx.write(packet);
         packetCount++;
-        System.err.println("[DISPATCH] Sent packet " + packetCount + ": " + packet.getClass().getSimpleName());
+        System.err.println("[DISPATCH] Queued packet " + packetCount + ": " + packet.getClass().getSimpleName());
       }
+      ctx.flush();
     } catch (SQLException e) {
       System.err.println("[DISPATCH] SQL Error: " + e.getMessage());
       ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(e));
