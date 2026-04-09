@@ -36,7 +36,6 @@ import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.te
 import org.apache.shardingsphere.database.protocol.mysql.payload.MySQLPacketPayload;
 import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
-import java.util.concurrent.atomic.AtomicInteger;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -131,11 +130,9 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
       CommandExecutor executor = createExecutor(command, ctx);
       Collection<DatabasePacket> response = executor.execute();
 
-      // Reset sequence ID to 1 before sending response
-      // COM_QUERY uses seq=0, response should start from seq=1
-      AtomicInteger sequenceId = new AtomicInteger(1);
-      ctx.channel().attr(org.apache.shardingsphere.database.protocol.mysql.constant.MySQLConstants.SEQUENCE_ID_ATTRIBUTE_KEY).set(sequenceId);
-      System.err.println("[DISPATCH] Reset sequence ID to 1 for response");
+      // Note: Sequence ID is automatically managed by ShardingSphere:
+      // - MySQLSequenceIdInboundHandler reads client packet seq and sets to seq+1
+      // - MySQLPacketCodecEngine uses getAndIncrement() for each outgoing packet
 
       // Write all response packets - flush each packet separately for MySQL CLI 8.0 compatibility
       // MySQL CLI 8.0 may not handle batched packets correctly
