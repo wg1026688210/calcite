@@ -61,11 +61,7 @@ public final class SystemVariableHandler {
     VARIABLE_VALUES.put("max_allowed_packet", "4194304");
     VARIABLE_VALUES.put("net_write_timeout", "60");
     VARIABLE_VALUES.put("performance_schema", "OFF");
-    VARIABLE_VALUES.put("version_comment", "MySQL Community Server - Milvus Gateway");
-    VARIABLE_VALUES.put("version", "8.0.33");
-    VARIABLE_VALUES.put("version_compile_machine", "x86_64");
-    VARIABLE_VALUES.put("version_compile_os", "Linux");
-    VARIABLE_VALUES.put("version_compile_zlib", "1.2.13");
+    VARIABLE_VALUES.put("version_comment", "MySQL Community Server - GPL");
 
     // Cache and mode variables (deprecated in MySQL 8.0 but still queried)
     VARIABLE_VALUES.put("query_cache_size", "0");

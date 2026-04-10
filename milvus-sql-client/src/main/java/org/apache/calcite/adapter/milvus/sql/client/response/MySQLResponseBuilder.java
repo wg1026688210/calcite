@@ -323,9 +323,10 @@ public final class MySQLResponseBuilder {
         MySQLBinaryColumnType.VARCHAR, 0, false));
     int statusFlags = calculateStatusFlags();
     // Intermediate packet: EOF (old) or nothing (new with DEPRECATE_EOF)
-    if (!deprecateEof) {
-      packets.add(new MySQLEofPacket(0, statusFlags));
-    }
+    System.out.println("有走到这里吗"+deprecateEof);
+//    if (!deprecateEof) {
+//      packets.add(new MySQLEofPacket(0, statusFlags));
+//    }
 
     // Add row with concatenated values if multiple variables
     StringBuilder value = new StringBuilder();
@@ -337,12 +338,7 @@ public final class MySQLResponseBuilder {
     row.add(value.toString());
     packets.add(new MySQLTextResultSetRowPacket(row));
 
-    // Final packet: OK if DEPRECATE_EOF, else EOF
-    if (deprecateEof) {
-      packets.add(new MySQLOKPacket(0, 0, statusFlags, 0, ""));
-    } else {
-      packets.add(new MySQLEofPacket(0, statusFlags));
-    }
+    packets.add(new MySQLEofPacket(0, statusFlags));
     return packets;
   }
 
