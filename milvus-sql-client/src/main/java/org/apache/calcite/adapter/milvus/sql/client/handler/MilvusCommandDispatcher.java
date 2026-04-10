@@ -64,11 +64,7 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
   @Override public void channelRead(ChannelHandlerContext ctx, Object msg) {
     System.err.println("[DISPATCH] Received message type: " + msg.getClass().getName());
 
-    // Handle MySQLCommandPacket directly (from codec)
-    if (msg instanceof MySQLCommandPacket) {
-      handleCommandPacket(ctx, (MySQLCommandPacket) msg);
-      return;
-    }
+
 
     // Handle ByteBuf (raw data from codec)
     if (msg instanceof ByteBuf) {
@@ -181,7 +177,7 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
       return new MilvusComPingExecutor();
     } else if (command instanceof MySQLComInitDbPacket) {
       return new MilvusComInitDbExecutor(
-          (MySQLComInitDbPacket) command, session);
+          (MySQLComInitDbPacket) command, session,sqlExecutor);
     } else if (command instanceof MySQLComQuitPacket) {
       return new MilvusComQuitExecutor(ctx);
     }

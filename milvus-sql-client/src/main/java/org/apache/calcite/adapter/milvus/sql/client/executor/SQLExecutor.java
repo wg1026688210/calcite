@@ -70,10 +70,6 @@ public class SQLExecutor {
     if (upperSql.startsWith("SET ")) {
       return new QueryResult(new ArrayList<>(), new ArrayList<>(), 0);
     }
-    // Handle USE database command
-    if (upperSql.startsWith("USE ")) {
-      return new QueryResult(new ArrayList<>(), new ArrayList<>(), 0);
-    }
     // Return empty result set for system queries (with proper column definitions)
     if (upperSql.startsWith("SHOW VARIABLES")) {
       List<ColumnInfo> columns = new ArrayList<>();
@@ -131,7 +127,7 @@ public class SQLExecutor {
 
   private Connection createConnection(String currentDatabase) throws SQLException {
     Properties info = new Properties();
-    info.setProperty("lex", "JAVA");
+    info.setProperty("lex", "mysql");
     info.setProperty("fun", "milvus");
     info.setProperty("defaultCharset", "UTF-8");
 
@@ -363,6 +359,7 @@ public class SQLExecutor {
   }
 
   public static class QueryResult {
+    public static final QueryResult EMPTY_RESULT = new QueryResult(new ArrayList<>(), new ArrayList<>(), 0);
     private final List<ColumnInfo> columns;
     private final List<List<Object>> rows;
     private final int updateCount;

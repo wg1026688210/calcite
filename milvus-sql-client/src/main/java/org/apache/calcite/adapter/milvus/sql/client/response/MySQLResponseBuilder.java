@@ -33,6 +33,7 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Builder for MySQL protocol response packets.
@@ -84,23 +85,16 @@ public final class MySQLResponseBuilder {
 
   /**
    * Builds a query response from SQL execution result.
-   * Returns: field count + column definitions + (EOF or OK) + rows + (EOF or OK) packet
-   * MySQL 5.7.5+ uses OK instead of EOF when CLIENT_DEPRECATE_EOF is set
+   * Returns: field count + column definitions + EOF + rows + EOF packet.
+   * Always uses EOF packets for maximum compatibility.
    */
   public static Collection<DatabasePacket> buildQueryResponse(SQLExecutor.QueryResult result) {
-    return buildQueryResponse(result, false); // Default to EOF for backward compatibility
-  }
 
-  /**
-   * Builds a query response with client capability awareness.
-   * @param deprecateEof true if CLIENT_DEPRECATE_EOF is set (MySQL 5.7.5+)
-   */
-  public static Collection<DatabasePacket> buildQueryResponse(SQLExecutor.QueryResult result, boolean deprecateEof) {
     List<DatabasePacket> packets = new ArrayList<>();
 
     if (!result.isResultSet()) {
       // Non-query result (UPDATE/INSERT/DELETE)
-      packets.add(buildOKPacket(result.getUpdateCount()));
+      packets.add(new MySQLEofPacket(0,  calculateStatusFlags(true, false, false)));
       System.err.println("[RESPONSE] Built non-query response, packets: " + packets.size());
       return packets;
     }
@@ -113,13 +107,9 @@ public final class MySQLResponseBuilder {
       packets.add(createColumnDefinitionPacket(column));
     }
 
-    // 3. After column definitions: EOF (old) or nothing (new with DEPRECATE_EOF)
+    // 3. After column definitions: always send EOF for maximum compatibility
     int statusFlags = calculateStatusFlags();
-    if (!deprecateEof) {
-      // Only send EOF when DEPRECATE_EOF is NOT set
-      packets.add(new MySQLEofPacket(0, statusFlags));
-    }
-    // When DEPRECATE_EOF is set, NO intermediate packet is sent after column definitions
+    packets.add(new MySQLEofPacket(0, statusFlags));
 
     // 4. Row data packets - handle null values
     for (List<Object> row : result.getRows()) {
@@ -132,9 +122,7 @@ public final class MySQLResponseBuilder {
 
     // 5. Final: Always use EOF for maximum compatibility
     // MySQL CLI 8.0 may have issues with OK packet in result set
-    packets.add(new MySQLEofPacket(0, statusFlags));
-
-    System.err.println("[RESPONSE] Built query response (deprecateEof=" + deprecateEof + "):");
+    packets.add(new MySQLEofPacket(0,  calculateStatusFlags(true, false, false)));
     System.err.println("[RESPONSE]   Columns: " + result.getColumns().size());
     System.err.println("[RESPONSE]   Rows: " + result.getRows().size());
     System.err.println("[RESPONSE]   Packets: " + packets.size());
@@ -287,25 +275,10 @@ public final class MySQLResponseBuilder {
     }
   }
 
-  /**
-   * Builds response for variable query (SELECT @@variable).
-   */
-  public static Collection<DatabasePacket> buildVariableQueryResponse(
-      java.util.Map<String, String> variables) {
-    return buildVariableQueryResponse(variables, false);
-  }
 
-  /**
-   * Builds response for variable query (SELECT @@variable).
-   * @param deprecateEof true if CLIENT_DEPRECATE_EOF is set (MySQL 5.7.5+)
-   */
-  public static Collection<DatabasePacket> buildVariableQueryResponse(
-      java.util.Map<String, String> variables, boolean deprecateEof) {
-    return buildVariableQueryResponse(variables, deprecateEof, null);
-  }
 
   public static Collection<DatabasePacket> buildVariableQueryResponse(
-      java.util.Map<String, String> variables, boolean deprecateEof, String columnName) {
+      java.util.Map<String, String> variables,  String columnName) {
     List<DatabasePacket> packets = new ArrayList<>();
 
     // Use first variable name as column name, or default to "@@variable"
@@ -322,11 +295,8 @@ public final class MySQLResponseBuilder {
         colName, "", 1024,
         MySQLBinaryColumnType.VARCHAR, 0, false));
     int statusFlags = calculateStatusFlags();
-    // Intermediate packet: EOF (old) or nothing (new with DEPRECATE_EOF)
-    System.out.println("有走到这里吗"+deprecateEof);
-//    if (!deprecateEof) {
-//      packets.add(new MySQLEofPacket(0, statusFlags));
-//    }
+    // Intermediate packet: always send EOF for maximum compatibility
+    packets.add(new MySQLEofPacket(0, statusFlags));
 
     // Add row with concatenated values if multiple variables
     StringBuilder value = new StringBuilder();
@@ -342,20 +312,9 @@ public final class MySQLResponseBuilder {
     return packets;
   }
 
-  /**
-   * Builds response for SHOW VARIABLES query.
-   */
-  public static Collection<DatabasePacket> buildShowVariablesResponse(
-      java.util.Map<String, String> variables) {
-    return buildShowVariablesResponse(variables, false);
-  }
 
-  /**
-   * Builds response for SHOW VARIABLES query.
-   * @param deprecateEof true if CLIENT_DEPRECATE_EOF is set (MySQL 5.7.5+)
-   */
   public static Collection<DatabasePacket> buildShowVariablesResponse(
-      java.util.Map<String, String> variables, boolean deprecateEof) {
+      Map<String, String> variables) {
     List<DatabasePacket> packets = new ArrayList<>();
 
     // Two columns: Variable_name, Value
@@ -371,10 +330,8 @@ public final class MySQLResponseBuilder {
             "Value", "", 1024,
             MySQLBinaryColumnType.VARCHAR, 0, false));
     int statusFlags = calculateStatusFlags();
-    // Intermediate packet: EOF (old) or nothing (new with DEPRECATE_EOF)
-    if (!deprecateEof) {
-      packets.add(new MySQLEofPacket(0, statusFlags));
-    }
+    // Intermediate packet: always send EOF for maximum compatibility
+    packets.add(new MySQLEofPacket(0, statusFlags));
 
     // Add rows
     for (java.util.Map.Entry<String, String> entry : variables.entrySet()) {
@@ -384,12 +341,8 @@ public final class MySQLResponseBuilder {
       packets.add(new MySQLTextResultSetRowPacket(row));
     }
 
-    // Final packet: OK if DEPRECATE_EOF, else EOF
-    if (deprecateEof) {
-      packets.add(new MySQLOKPacket(0, 0, statusFlags, 0, ""));
-    } else {
-      packets.add(new MySQLEofPacket(0, statusFlags));
-    }
+    // Final packet: always send EOF for maximum compatibility
+    packets.add(new MySQLEofPacket(0, statusFlags));
     return packets;
   }
 }

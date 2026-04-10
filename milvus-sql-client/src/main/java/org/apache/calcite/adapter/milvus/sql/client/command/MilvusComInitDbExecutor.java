@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.adapter.milvus.sql.client.command;
 
+import org.apache.calcite.adapter.milvus.sql.client.executor.SQLExecutor;
 import org.apache.calcite.adapter.milvus.sql.client.response.MySQLResponseBuilder;
 import org.apache.calcite.adapter.milvus.sql.client.session.ConnectionSession;
 
@@ -33,15 +34,29 @@ public class MilvusComInitDbExecutor implements CommandExecutor {
 
   private final String database;
   private final ConnectionSession session;
+  private final SQLExecutor sqlExecutor;
 
   public MilvusComInitDbExecutor(MySQLComInitDbPacket packet,
-                                 ConnectionSession session) {
+                                 ConnectionSession session,
+      SQLExecutor sqlExecutor) {
     this.database = packet.getSchema();
     this.session = session;
+    this.sqlExecutor = sqlExecutor;
   }
 
   @Override public Collection<DatabasePacket> execute() throws SQLException {
-    session.setCurrentDatabase(database);
-    return Collections.singletonList(MySQLResponseBuilder.buildOKPacket(0));
+
+    // Validate database exists
+    if (!sqlExecutor.databaseExists(database)) {
+      return Collections.singletonList(
+          MySQLResponseBuilder.buildErrorPacket(
+              "Unknown database '" + database + "'", 1049, "42000"));
+    }
+
+    if (session != null) {
+      session.setCurrentDatabase(database);
+    }
+
+    return MySQLResponseBuilder.buildQueryResponse(SQLExecutor.QueryResult.EMPTY_RESULT);
   }
 }

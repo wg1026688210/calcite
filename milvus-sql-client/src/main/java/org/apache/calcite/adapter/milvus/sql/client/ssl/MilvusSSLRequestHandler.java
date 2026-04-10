@@ -46,12 +46,10 @@ public final class MilvusSSLRequestHandler extends ByteToMessageDecoder {
     if (isSSLRequest(in)) {
       SSLEngine sslEngine = MilvusSslContextFactory.getInstance().newSSLEngine(context.alloc());
       SslHandler sslHandler = new SslHandler(sslEngine);
-      // Use addAfter (same as ShardingSphere)
       context.pipeline().addAfter(MilvusSSLRequestHandler.class.getSimpleName(),
           SslHandler.class.getSimpleName(), sslHandler);
       in.skipBytes(HEADER_LENGTH + SSL_REQUEST_LENGTH);
     }
-    // Remove self (no out.add, same as ShardingSphere)
     context.pipeline().remove(this);
   }
 

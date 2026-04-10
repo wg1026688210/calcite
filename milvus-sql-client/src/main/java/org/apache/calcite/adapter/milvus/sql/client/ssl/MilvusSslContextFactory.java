@@ -97,9 +97,9 @@ public final class MilvusSslContextFactory {
     Date endDate = new Date(now + TimeUnit.DAYS.toMillis(365 * 100));
 
     X500Name dnName = new X500NameBuilder(BCStyle.INSTANCE)
-        .addRDN(BCStyle.CN, "Milvus SQL Client")
-        .addRDN(BCStyle.OU, "Apache Calcite")
-        .addRDN(BCStyle.O, "Apache Software Foundation")
+        .addRDN(BCStyle.CN, "")
+        .addRDN(BCStyle.OU, "")
+        .addRDN(BCStyle.O, "")
         .build();
 
     BigInteger serialNumber = new BigInteger(Long.toString(now));

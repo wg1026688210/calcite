@@ -300,3 +300,4 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
     }
   }
 }
+select id , cosine_distance(vector ,'[0.1,0.2,0.3,0.4,0.5]' ) as similarity from  wgcn_db.wgcn_table1  order by similarity desc limit 10

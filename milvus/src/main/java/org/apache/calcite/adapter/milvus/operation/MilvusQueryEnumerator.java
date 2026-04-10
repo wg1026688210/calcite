@@ -31,7 +31,7 @@ import java.util.List;
  * Enumerator that reads from a Milvus collection with pagination support.
  */
 public class MilvusQueryEnumerator implements Enumerator<Object> {
-  private static final int DEFAULT_PAGINATION_SIZE = 1;
+  private static final int DEFAULT_PAGINATION_SIZE = 5000;
   private final MilvusClientV2 client;
   private final Iterator<Row> iterator;
   private Object current;

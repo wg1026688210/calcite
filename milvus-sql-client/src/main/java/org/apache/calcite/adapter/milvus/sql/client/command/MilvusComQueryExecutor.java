@@ -48,15 +48,11 @@ public class MilvusComQueryExecutor implements CommandExecutor {
   @Override public Collection<DatabasePacket> execute() throws SQLException {
     String trimmedSql = sql.trim();
 
-    // Check if client supports DEPRECATE_EOF (MySQL 5.7.5+)
-    int flags = session != null ? session.getCapabilityFlags() : 0;
-    boolean deprecateEof = (flags & MySQLCapabilityFlag.CLIENT_DEPRECATE_EOF.getValue()) != 0;
-    System.err.println("[DEBUG] Client capability flags: 0x" + Integer.toHexString(flags) +
-        ", DEPRECATE_EOF: " + deprecateEof);
+
 
     // Handle system variable queries (@@variable) for MySQL 8.0+ JDBC compatibility
     if (SystemVariableHandler.isSystemVariableQuery(trimmedSql)) {
-      return SystemVariableHandler.handle(trimmedSql, deprecateEof);
+      return SystemVariableHandler.handle(trimmedSql);
     }
 
     // Handle USE database command (MySQL JDBC sends it as COM_QUERY)
@@ -72,13 +68,13 @@ public class MilvusComQueryExecutor implements CommandExecutor {
       if (session != null) {
         session.setCurrentDatabase(dbName);
       }
-      return Collections.singletonList(MySQLResponseBuilder.buildOKPacket(0));
+      return MySQLResponseBuilder.buildQueryResponse(SQLExecutor.QueryResult.EMPTY_RESULT);
     }
 
     // Use session's current database for execution
     String currentDb = session != null ? session.getCurrentDatabase() : null;
     SQLExecutor.QueryResult result = sqlExecutor.execute(sql, currentDb);
 
-    return MySQLResponseBuilder.buildQueryResponse(result, deprecateEof);
+    return MySQLResponseBuilder.buildQueryResponse(result);
   }
 }

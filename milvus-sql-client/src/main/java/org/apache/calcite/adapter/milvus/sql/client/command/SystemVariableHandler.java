@@ -18,7 +18,6 @@ package org.apache.calcite.adapter.milvus.sql.client.command;
 
 import org.apache.calcite.adapter.milvus.sql.client.response.MySQLResponseBuilder;
 
-import org.apache.shardingsphere.database.protocol.mysql.packet.generic.MySQLOKPacket;
 import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
 import java.util.ArrayList;
@@ -93,20 +92,12 @@ public final class SystemVariableHandler {
   /**
    * Handles system variable query and returns mock result.
    */
-  public static Collection<DatabasePacket> handle(String sql) {
-    return handle(sql, false);
-  }
-
-  /**
-   * Handles system variable query and returns mock result.
-   * @param deprecateEof true if CLIENT_DEPRECATE_EOF is set (MySQL 5.7.5+)
-   */
-  public static Collection<DatabasePacket> handle(String sql, boolean deprecateEof) {
+  public static Collection<DatabasePacket> handle(String sql){
     List<DatabasePacket> packets = new ArrayList<>();
 
     if (sql.toUpperCase().contains("SHOW VARIABLES")) {
       // Handle SHOW VARIABLES WHERE Variable_name IN (...)
-      return handleShowVariables(sql, deprecateEof);
+      return handleShowVariables(sql);
     }
 
     // Handle SELECT @@variable AS alias, ...
@@ -126,13 +117,13 @@ public final class SystemVariableHandler {
     }
 
     // Build result set with variable names and values
-    return buildVariableResultSet(results, deprecateEof);
+    return buildVariableResultSet(results);
   }
 
   /**
    * Handles SHOW VARIABLES query.
    */
-  private static Collection<DatabasePacket> handleShowVariables(String sql, boolean deprecateEof) {
+  private static Collection<DatabasePacket> handleShowVariables(String sql) {
     // Extract variable names from WHERE clause if present
     List<String> requestedVars = extractVariableNames(sql);
 
@@ -148,7 +139,7 @@ public final class SystemVariableHandler {
       }
     }
 
-    return buildShowVariablesResultSet(results, deprecateEof);
+    return buildShowVariablesResultSet(results);
   }
 
   /**
@@ -171,18 +162,18 @@ public final class SystemVariableHandler {
    * Builds result set for SELECT @@variable queries.
    */
   private static Collection<DatabasePacket> buildVariableResultSet(
-      Map<String, String> variables, boolean deprecateEof) {
+      Map<String, String> variables) {
     // For SELECT @@var AS alias, we return the values directly
     // Use the first variable name as column name for proper client compatibility
     String columnName = variables.isEmpty() ? null : "@@" + variables.keySet().iterator().next();
-    return MySQLResponseBuilder.buildVariableQueryResponse(variables, deprecateEof, columnName);
+    return MySQLResponseBuilder.buildVariableQueryResponse(variables, columnName);
   }
 
   /**
    * Builds result set for SHOW VARIABLES queries.
    */
   private static Collection<DatabasePacket> buildShowVariablesResultSet(
-      Map<String, String> variables, boolean deprecateEof) {
-    return MySQLResponseBuilder.buildShowVariablesResponse(variables, deprecateEof);
+      Map<String, String> variables) {
+    return MySQLResponseBuilder.buildShowVariablesResponse(variables);
   }
 }
