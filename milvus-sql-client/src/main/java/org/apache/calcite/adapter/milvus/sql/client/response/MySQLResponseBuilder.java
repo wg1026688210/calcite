@@ -322,8 +322,10 @@ public final class MySQLResponseBuilder {
         colName, "", 1024,
         MySQLBinaryColumnType.VARCHAR, 0, false));
     int statusFlags = calculateStatusFlags();
-    // Always use EOF for maximum compatibility
-    packets.add(new MySQLEofPacket(0, statusFlags));
+    // Intermediate packet: EOF (old) or nothing (new with DEPRECATE_EOF)
+    if (!deprecateEof) {
+      packets.add(new MySQLEofPacket(0, statusFlags));
+    }
 
     // Add row with concatenated values if multiple variables
     StringBuilder value = new StringBuilder();
@@ -335,8 +337,12 @@ public final class MySQLResponseBuilder {
     row.add(value.toString());
     packets.add(new MySQLTextResultSetRowPacket(row));
 
-    // Always use EOF for maximum compatibility
-    packets.add(new MySQLEofPacket(0, statusFlags));
+    // Final packet: OK if DEPRECATE_EOF, else EOF
+    if (deprecateEof) {
+      packets.add(new MySQLOKPacket(0, 0, statusFlags, 0, ""));
+    } else {
+      packets.add(new MySQLEofPacket(0, statusFlags));
+    }
     return packets;
   }
 
@@ -369,8 +375,10 @@ public final class MySQLResponseBuilder {
             "Value", "", 1024,
             MySQLBinaryColumnType.VARCHAR, 0, false));
     int statusFlags = calculateStatusFlags();
-    // Always use EOF for maximum compatibility
-    packets.add(new MySQLEofPacket(0, statusFlags));
+    // Intermediate packet: EOF (old) or nothing (new with DEPRECATE_EOF)
+    if (!deprecateEof) {
+      packets.add(new MySQLEofPacket(0, statusFlags));
+    }
 
     // Add rows
     for (java.util.Map.Entry<String, String> entry : variables.entrySet()) {
@@ -380,8 +388,12 @@ public final class MySQLResponseBuilder {
       packets.add(new MySQLTextResultSetRowPacket(row));
     }
 
-    // Always use EOF for maximum compatibility
-    packets.add(new MySQLEofPacket(0, statusFlags));
+    // Final packet: OK if DEPRECATE_EOF, else EOF
+    if (deprecateEof) {
+      packets.add(new MySQLOKPacket(0, 0, statusFlags, 0, ""));
+    } else {
+      packets.add(new MySQLEofPacket(0, statusFlags));
+    }
     return packets;
   }
 }
