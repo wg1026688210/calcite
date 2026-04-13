@@ -49,9 +49,7 @@ public class SQLExecutor {
     this.milvusPassword = milvusPassword;
   }
 
-  public QueryResult execute(String sql) throws SQLException {
-    return execute(sql, milvusDatabase);
-  }
+
 
   /**
    * Executes SQL with specified database context.
@@ -70,7 +68,6 @@ public class SQLExecutor {
     if (upperSql.startsWith("SET ")) {
       return new QueryResult(new ArrayList<>(), new ArrayList<>(), 0);
     }
-    // Return empty result set for system queries (with proper column definitions)
     if (upperSql.startsWith("SHOW VARIABLES")) {
       List<ColumnInfo> columns = new ArrayList<>();
       columns.add(new ColumnInfo("Variable_name", Types.VARCHAR, "VARCHAR"));
@@ -100,6 +97,13 @@ public class SQLExecutor {
     if (upperSql.startsWith("SHOW DATABASES") || upperSql.startsWith("SHOW SCHEMAS")) {
       return buildShowDatabasesResult();
     }
+    if (upperSql.matches("(?i)^SELECT\\s+DATABASE\\s*\\(\\s*\\)\\s*;?$")) {
+      List<ColumnInfo> columns = new ArrayList<>();
+      columns.add(new ColumnInfo("DATABASE()", Types.VARCHAR, "VARCHAR"));
+      List<List<Object>> rows = new ArrayList<>();
+      rows.add(Arrays.asList(currentDatabase != null ? currentDatabase : ""));
+      return new QueryResult(columns, rows, 0);
+    }
     if (upperSql.startsWith("SHOW TABLES")) {
       return buildShowTablesResult(currentDatabase);
     }
@@ -116,12 +120,13 @@ public class SQLExecutor {
 
     try (Connection connection = createConnection(currentDatabase)) {
       try (Statement statement = connection.createStatement()) {
-        if (statement.execute(sql)) {
-          ResultSet rs = statement.getResultSet();
-          return convertResultSet(rs);
+        boolean hasResultSet = statement.execute(sql);
+        if (hasResultSet) {
+          try (ResultSet rs = statement.getResultSet()) {
+            return convertResultSet(rs);
+          }
         } else {
-          int updateCount = statement.getUpdateCount();
-          return new QueryResult(new ArrayList<>(), new ArrayList<>(), updateCount);
+          return new QueryResult(new ArrayList<>(), new ArrayList<>(), statement.getUpdateCount());
         }
       }
     }
@@ -156,12 +161,12 @@ public class SQLExecutor {
   /**
    * Checks if a database exists in Milvus.
    */
-  public boolean databaseExists(String databaseName) {
+  public boolean databaseNotExists(String databaseName) {
     if (databaseName == null || databaseName.isEmpty()) {
-      return false;
+      return true;
     }
     List<String> databases = listMilvusDatabases();
-    return databases.contains(databaseName);
+    return !databases.contains(databaseName);
   }
 
   /**
@@ -288,8 +293,6 @@ public class SQLExecutor {
     List<ColumnInfo> columns = new ArrayList<>();
     columns.add(new ColumnInfo("Tables_in_" + dbName, Types.VARCHAR, "VARCHAR"));
     List<List<Object>> rows = new ArrayList<>();
-
-    final Driver driver = new Driver().withPrepareFactory(MilvusPrepareImpl::new);
     Properties info = new Properties();
     info.setProperty("lex", "JAVA");
     info.setProperty("fun", "milvus");
@@ -335,13 +338,6 @@ public class SQLExecutor {
       return label;
     }
 
-    public String getSchemaName() {
-      return schemaName;
-    }
-
-    public String getTableName() {
-      return tableName;
-    }
 
     public int getSqlType() {
       return sqlType;

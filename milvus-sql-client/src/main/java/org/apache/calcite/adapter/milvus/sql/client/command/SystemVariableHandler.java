@@ -129,10 +129,8 @@ public final class SystemVariableHandler {
 
     Map<String, String> results = new HashMap<>();
     if (requestedVars.isEmpty()) {
-      // Return all known variables
       results.putAll(VARIABLE_VALUES);
     } else {
-      // Return only requested variables
       for (String var : requestedVars) {
         String value = VARIABLE_VALUES.getOrDefault(var.toLowerCase(), "");
         results.put(var, value);

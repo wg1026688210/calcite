@@ -148,7 +148,7 @@ public  class MilvusRowIterator implements Iterator<Row> {
         }
       } catch (Exception e) {
         hasMore = false;
-        throw new RuntimeException("Error loading next page from Milvus", e);
+        throw new RuntimeException("Error loading next page from Milvus:"+e.getMessage(), e);
       }
     }
 

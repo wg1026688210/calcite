@@ -20,7 +20,6 @@ import org.apache.calcite.adapter.milvus.sql.client.executor.SQLExecutor;
 import org.apache.calcite.adapter.milvus.sql.client.response.MySQLResponseBuilder;
 import org.apache.calcite.adapter.milvus.sql.client.session.ConnectionSession;
 
-import org.apache.shardingsphere.database.protocol.mysql.constant.MySQLCapabilityFlag;
 import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.text.query.MySQLComQueryPacket;
 import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
@@ -47,7 +46,8 @@ public class MilvusComQueryExecutor implements CommandExecutor {
 
   @Override public Collection<DatabasePacket> execute() throws SQLException {
     String trimmedSql = sql.trim();
-    // Handle system variable queries (@@variable) for MySQL 8.0+ JDBC compatibility
+    // Handle system variable queries (@@variable / SHOW VARIABLES) for MySQL 8.0+ JDBC compatibility
+    // These cannot be pushed down to Calcite and must be mocked at the command layer.
     if (SystemVariableHandler.isSystemVariableQuery(trimmedSql)) {
       return SystemVariableHandler.handle(trimmedSql);
     }
@@ -57,7 +57,7 @@ public class MilvusComQueryExecutor implements CommandExecutor {
     if (upperSql.startsWith("USE ")) {
       String dbName = trimmedSql.substring(4).trim().replace(";", "").replace("`", "");
       // Validate database exists
-      if (!sqlExecutor.databaseExists(dbName)) {
+      if (sqlExecutor.databaseNotExists(dbName)) {
         return Collections.singletonList(
             MySQLResponseBuilder.buildErrorPacket(
                 "Unknown database '" + dbName + "'", 1049, "42000"));

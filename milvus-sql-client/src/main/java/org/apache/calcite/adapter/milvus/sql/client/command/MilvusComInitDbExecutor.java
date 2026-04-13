@@ -47,7 +47,7 @@ public class MilvusComInitDbExecutor implements CommandExecutor {
   @Override public Collection<DatabasePacket> execute() throws SQLException {
 
     // Validate database exists
-    if (!sqlExecutor.databaseExists(database)) {
+    if (sqlExecutor.databaseNotExists(database)) {
       return Collections.singletonList(
           MySQLResponseBuilder.buildErrorPacket(
               "Unknown database '" + database + "'", 1049, "42000"));
