@@ -293,10 +293,6 @@ public class SQLExecutor {
     List<ColumnInfo> columns = new ArrayList<>();
     columns.add(new ColumnInfo("Tables_in_" + dbName, Types.VARCHAR, "VARCHAR"));
     List<List<Object>> rows = new ArrayList<>();
-    Properties info = new Properties();
-    info.setProperty("lex", "JAVA");
-    info.setProperty("fun", "milvus");
-    info.setProperty("defaultCharset", "UTF-8");
     MilvusSchema milvusSchema = createMilvusSchema(dbName);
     for (String tableName : milvusSchema.getTableNames()) {
       rows.add(Arrays.asList(tableName));

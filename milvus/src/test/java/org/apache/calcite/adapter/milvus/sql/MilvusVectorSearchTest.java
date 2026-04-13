@@ -280,6 +280,7 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
         String.format(
             "SELECT book_name, cosine_distance(%s, '%s') AS similarity\n"
                 + "FROM milvus.%s /*+ MILVUS_OPTIONS(nprobe='32') */\n"
+                + " where book_name > '小王子'\n"
                 + "ORDER BY similarity DESC\n"
                 + "LIMIT 5",
             CommonData.defaultVectorField,
@@ -300,4 +301,3 @@ public class MilvusVectorSearchTest extends MilvusBaseE2ETest {
     }
   }
 }
-select id , cosine_distance(vector ,'[0.1,0.2,0.3,0.4,0.5]' ) as similarity from  wgcn_db.wgcn_table1  order by similarity desc limit 10
