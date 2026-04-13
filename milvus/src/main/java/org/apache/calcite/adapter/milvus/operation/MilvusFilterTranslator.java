@@ -46,7 +46,7 @@ public class MilvusFilterTranslator {
             kind == SqlKind.EQUALS || kind == SqlKind.NOT_EQUALS ||
             kind == SqlKind.GREATER_THAN || kind == SqlKind.GREATER_THAN_OR_EQUAL ||
             kind == SqlKind.LESS_THAN || kind == SqlKind.LESS_THAN_OR_EQUAL ||
-            kind == SqlKind.NOT || kind == SqlKind.LIKE) {
+            kind == SqlKind.NOT || kind == SqlKind.LIKE || kind == SqlKind.CAST) {
           return super.visitCall(call);
         } else {
           hasUdf[0] = true;
@@ -119,6 +119,11 @@ public class MilvusFilterTranslator {
         return translateLogicalOp("||", operands);
       case NOT:
         return translateNot(operands);
+      case CAST:
+        if (operands.size() == 1) {
+          return operands.get(0).accept(this);
+        }
+        return null;
       default:
         return null;
       }
