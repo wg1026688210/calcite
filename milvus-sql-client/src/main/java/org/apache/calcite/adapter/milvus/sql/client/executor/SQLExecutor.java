@@ -112,6 +112,8 @@ public class SQLExecutor {
       return new QueryResult(columns, new ArrayList<>(), 0);
     }
 
+
+
     try (Connection connection = createConnection(currentDatabase)) {
       try (Statement statement = connection.createStatement()) {
         if (statement.execute(sql)) {

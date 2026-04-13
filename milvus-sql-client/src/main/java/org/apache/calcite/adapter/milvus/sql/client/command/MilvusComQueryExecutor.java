@@ -47,9 +47,6 @@ public class MilvusComQueryExecutor implements CommandExecutor {
 
   @Override public Collection<DatabasePacket> execute() throws SQLException {
     String trimmedSql = sql.trim();
-
-
-
     // Handle system variable queries (@@variable) for MySQL 8.0+ JDBC compatibility
     if (SystemVariableHandler.isSystemVariableQuery(trimmedSql)) {
       return SystemVariableHandler.handle(trimmedSql);

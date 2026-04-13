@@ -27,6 +27,8 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
 
+import org.apache.shardingsphere.proxy.frontend.netty.ChannelAttrInitializer;
+
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -46,9 +48,9 @@ public class MilvusChannelInitializer extends ChannelInitializer<SocketChannel> 
   }
 
   @Override protected void initChannel(SocketChannel ch) {
-    ch.attr(CommonConstants.CHARSET_ATTRIBUTE_KEY).set(StandardCharsets.UTF_8);
 
     ch.pipeline()
+        .addLast(new ChannelAttrInitializer())
         // Layer 1: Protocol Layer - ShardingSphere MySQL codec
         .addLast(new PacketCodec(new MySQLPacketCodecEngine()))
         // ShardingSphere manages sequence ID automatically
