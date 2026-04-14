@@ -45,18 +45,48 @@ public class SQLExecutor {
   private final String milvusUsername;
   private final String milvusPassword;
   private final int queryTimeoutSeconds;
+  private final ConnectionPoolManager poolManager;
+
+  private volatile List<String> cachedDatabases = new ArrayList<>();
+  private volatile long databaseCacheTime = 0;
+  private static final long DATABASE_CACHE_TTL_MS = 5000;
 
   public SQLExecutor(String milvusHost, int milvusPort, String milvusDatabase,
       String milvusUsername, String milvusPassword, int queryTimeoutSeconds) {
+    this(milvusHost, milvusPort, milvusDatabase, milvusUsername, milvusPassword,
+        queryTimeoutSeconds, 0);
+  }
+
+  public SQLExecutor(String milvusHost, int milvusPort, String milvusDatabase,
+      String milvusUsername, String milvusPassword, int queryTimeoutSeconds,
+      int connectionPoolSize) {
     this.milvusHost = milvusHost;
     this.milvusPort = milvusPort;
     this.milvusDatabase = milvusDatabase;
     this.milvusUsername = milvusUsername;
     this.milvusPassword = milvusPassword;
     this.queryTimeoutSeconds = queryTimeoutSeconds;
+    if (connectionPoolSize > 0) {
+      this.poolManager = new ConnectionPoolManager(connectionPoolSize, db -> {
+        try {
+          return createConnection(db);
+        } catch (SQLException e) {
+          throw new RuntimeException("Failed to create connection", e);
+        }
+      });
+    } else {
+      this.poolManager = null;
+    }
   }
 
-
+  /**
+   * Closes the connection pool and releases all idle connections.
+   */
+  public void close() {
+    if (poolManager != null) {
+      poolManager.close();
+    }
+  }
 
   /**
    * Executes SQL with specified database context.
@@ -74,21 +104,33 @@ public class SQLExecutor {
     String upperSql = trimmedSql.toUpperCase();
     // System variable queries are handled by SystemVariableHandler at the command layer.
 
-
+    if (poolManager != null) {
+      Connection connection = poolManager.borrow(currentDatabase);
+      try {
+        return executeWithConnection(sql, connection);
+      } finally {
+        poolManager.returnConnection(currentDatabase, connection);
+      }
+    }
 
     try (Connection connection = createConnection(currentDatabase)) {
-      try (Statement statement = connection.createStatement()) {
-        if (queryTimeoutSeconds > 0) {
-          statement.setQueryTimeout(queryTimeoutSeconds);
+      return executeWithConnection(sql, connection);
+    }
+  }
+
+  private QueryResult executeWithConnection(String sql, Connection connection)
+      throws SQLException {
+    try (Statement statement = connection.createStatement()) {
+      if (queryTimeoutSeconds > 0) {
+        statement.setQueryTimeout(queryTimeoutSeconds);
+      }
+      boolean hasResultSet = statement.execute(sql);
+      if (hasResultSet) {
+        try (ResultSet rs = statement.getResultSet()) {
+          return convertResultSet(rs);
         }
-        boolean hasResultSet = statement.execute(sql);
-        if (hasResultSet) {
-          try (ResultSet rs = statement.getResultSet()) {
-            return convertResultSet(rs);
-          }
-        } else {
-          return new QueryResult(new ArrayList<>(), new ArrayList<>(), statement.getUpdateCount());
-        }
+      } else {
+        return new QueryResult(new ArrayList<>(), new ArrayList<>(), statement.getUpdateCount());
       }
     }
   }
@@ -137,8 +179,15 @@ public class SQLExecutor {
 
   /**
    * Lists all databases from Milvus server using MilvusClientV2.
+   * Caches the result for 5 seconds to avoid creating a client on every call.
    */
   public List<String> listMilvusDatabases() {
+    long now = System.currentTimeMillis();
+    List<String> cached = cachedDatabases;
+    if (now - databaseCacheTime < DATABASE_CACHE_TTL_MS && !cached.isEmpty()) {
+      return new ArrayList<>(cached);
+    }
+
     List<String> databases = new ArrayList<>();
     try {
       // Connect to Milvus using v2 SDK to list databases
@@ -162,6 +211,8 @@ public class SQLExecutor {
       LOGGER.warn("[SQLExecutor] Failed to list databases: {}", e.getMessage());
       databases.add(milvusDatabase);
     }
+    cachedDatabases = new ArrayList<>(databases);
+    databaseCacheTime = now;
     return databases;
   }
 

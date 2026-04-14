@@ -17,6 +17,7 @@
 package org.apache.calcite.adapter.milvus.sql.client.handler;
 
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
+import org.apache.calcite.adapter.milvus.sql.client.executor.SQLExecutor;
 
 import org.apache.shardingsphere.database.protocol.codec.PacketCodec;
 import org.apache.shardingsphere.database.protocol.mysql.codec.MySQLPacketCodecEngine;
@@ -37,9 +38,11 @@ import io.netty.handler.timeout.IdleStateHandler;
 public class MilvusChannelInitializer extends ChannelInitializer<SocketChannel> {
 
   private final MilvusServerConfig config;
+  private final SQLExecutor sqlExecutor;
 
-  public MilvusChannelInitializer(MilvusServerConfig config) {
+  public MilvusChannelInitializer(MilvusServerConfig config, SQLExecutor sqlExecutor) {
     this.config = config;
+    this.sqlExecutor = sqlExecutor;
   }
 
   @Override protected void initChannel(SocketChannel ch) {
@@ -54,6 +57,6 @@ public class MilvusChannelInitializer extends ChannelInitializer<SocketChannel> 
         .addLast(new IdleStateHandler(0, 0, config.getIdleTimeoutSeconds()))
 
         // Layer 2+3: Unified Frontend Handler (Authentication + Command Dispatch)
-        .addLast(new MilvusFrontendHandler(config));
+        .addLast(new MilvusFrontendHandler(config, sqlExecutor));
   }
 }
