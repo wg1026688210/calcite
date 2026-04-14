@@ -17,7 +17,6 @@
 package org.apache.calcite.adapter.milvus.sql.client.server;
 
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
-import org.apache.calcite.adapter.milvus.sql.client.executor.SQLExecutor;
 import org.apache.calcite.adapter.milvus.sql.client.handler.MilvusChannelInitializer;
 
 import io.netty.bootstrap.ServerBootstrap;
@@ -37,7 +36,6 @@ public class MilvusMySQLServer {
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
   private Channel channel;
-  private SQLExecutor sqlExecutor;
 
   public MilvusMySQLServer(MilvusServerConfig config) {
     this.config = config;
@@ -46,14 +44,6 @@ public class MilvusMySQLServer {
   }
 
   public void start() throws InterruptedException {
-    sqlExecutor = new SQLExecutor(
-        config.getMilvusHost(),
-        config.getMilvusPort(),
-        config.getMilvusDatabase(),
-        config.getMilvusUsername(),
-        config.getMilvusPassword(),
-        config.getQueryTimeoutSeconds(),
-        config.getConnectionPoolSize());
 
     ServerBootstrap bootstrap = createBootstrap();
     ChannelFuture future = bootstrap.bind(config.getHost(), config.getPort()).sync();
@@ -64,7 +54,7 @@ public class MilvusMySQLServer {
     ServerBootstrap bootstrap = new ServerBootstrap();
     bootstrap.group(bossGroup, workerGroup)
         .channel(NioServerSocketChannel.class)
-        .childHandler(new MilvusChannelInitializer(config, sqlExecutor))
+        .childHandler(new MilvusChannelInitializer(config))
         .option(ChannelOption.SO_BACKLOG, config.getBacklog())
         .option(ChannelOption.SO_REUSEADDR, true)
         .childOption(ChannelOption.SO_KEEPALIVE, true)
@@ -83,9 +73,6 @@ public class MilvusMySQLServer {
   public void stop() {
     if (channel != null) {
       channel.close();
-    }
-    if (sqlExecutor != null) {
-      sqlExecutor.close();
     }
     if (bossGroup != null) {
       bossGroup.shutdownGracefully();

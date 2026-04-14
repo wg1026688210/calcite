@@ -46,9 +46,6 @@ public class MilvusServerConfig {
   // TCP accept backlog
   private int backlog = 1024;
 
-  // CalciteConnection pool size per database (default 5, min 1, max 20)
-  private int connectionPoolSize = 5;
-
   public int getPort() {
     return port;
   }
@@ -173,13 +170,5 @@ public class MilvusServerConfig {
 
   public void setBacklog(int backlog) {
     this.backlog = backlog;
-  }
-
-  public int getConnectionPoolSize() {
-    return connectionPoolSize;
-  }
-
-  public void setConnectionPoolSize(int connectionPoolSize) {
-    this.connectionPoolSize = Math.max(1, Math.min(20, connectionPoolSize));
   }
 }

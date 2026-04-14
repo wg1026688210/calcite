@@ -16,9 +16,7 @@
  */
 package org.apache.calcite.adapter.milvus.sql.client.handler;
 
-import org.apache.calcite.adapter.milvus.sql.client.command.MilvusCommandExecutorFactory;
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
-import org.apache.calcite.adapter.milvus.sql.client.executor.SQLExecutor;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -32,10 +30,9 @@ public class MilvusFrontendHandler extends ChannelInboundHandlerAdapter {
   private final MilvusAuthHandler authHandler;
   private final MilvusCommandDispatcher commandDispatcher;
 
-  public MilvusFrontendHandler(MilvusServerConfig config, SQLExecutor sqlExecutor) {
+  public MilvusFrontendHandler(MilvusServerConfig config) {
     this.authHandler = new MilvusAuthHandler(config);
-    this.commandDispatcher = new MilvusCommandDispatcher(sqlExecutor,
-        MilvusCommandExecutorFactory::createExecutor);
+    this.commandDispatcher = new MilvusCommandDispatcher(config);
   }
 
   @Override public void channelActive(ChannelHandlerContext ctx) throws Exception {
