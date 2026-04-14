@@ -1,7 +1,70 @@
-Ready to code?
+编程原则：
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
-Here is Claude's plan:
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+
+
 Milvus SQL Client - 轻量级 MySQL Frontend Server 重构计划
 
 背景与目标
@@ -71,8 +134,6 @@ Milvus SQL Client - 轻量级 MySQL Frontend Server 重构计划
 │ 输出: DatabasePacket[]                                          │
 └─────────────────────────────────────────────────────────────────┘
 
-注：暂不考虑 SSL/TLS 支持（未来可扩展）
-
 代码结构变更
 
 新目录结构
@@ -109,239 +170,9 @@ milvus-sql-client/src/main/java/org/apache/calcite/adapter/milvus/sql/client/
 └── executor/
 └── SQLExecutor.java                         # Calcite 集成（保留）
 
-删除的文件
 
-- MySQLProtocolHandler.java - 职责拆分后删除
-- MySQLCodecEngine.java - 直接使用 ShardingSphere codec
-
-关键类设计
-
-1. MilvusChannelInitializer
-
-public class MilvusChannelInitializer extends ChannelInitializer<SocketChannel> {
-
-     @Override
-     protected void initChannel(SocketChannel ch) {
-         ch.pipeline()
-             // Protocol Layer: ShardingSphere 编解码
-             .addLast(new PacketCodec(new MySQLPacketCodecEngine()))
-
-             // Authentication Layer
-             .addLast(new MilvusAuthHandler(config))
-
-             // Command Layer
-             .addLast(new MilvusCommandDispatcher(config));
-     }
-}
-
-2. MilvusAuthHandler
-
-public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
-
-     private boolean handshakeComplete = false;
-     private MySQLAuthenticationPluginData authPluginData;
-
-     @Override
-     public void channelActive(ChannelHandlerContext ctx) {
-         // 发送 Handshake 包
-         sendHandshake(ctx);
-     }
-
-     @Override
-     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-         if (!handshakeComplete) {
-             processHandshakeResponse(ctx, (ByteBuf) msg);
-         } else {
-             // 认证完成，传递给下一层
-             ctx.fireChannelRead(msg);
-         }
-     }
-
-     private void sendHandshake(ChannelHandlerContext ctx) {
-         int connectionId = generateConnectionId();
-         authPluginData = new MySQLAuthenticationPluginData();
-         MySQLHandshakePacket handshake = new MySQLHandshakePacket(
-             connectionId, false, authPluginData);
-         ctx.writeAndFlush(handshake);
-     }
-
-     private void processHandshakeResponse(ChannelHandlerContext ctx, ByteBuf buffer) {
-         // 解析响应，验证（当前接受任何凭据）
-         // 创建 ConnectionSession 并绑定到 channel
-         // 发送 OK 包
-         // 移除自己或标记 handshakeComplete
-     }
-}
-
-3. MilvusCommandDispatcher
-
-public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
-
-     private final MilvusServerConfig config;
-     private final SQLExecutor sqlExecutor;
-
-     @Override
-     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-         if (!(msg instanceof MySQLCommandPacket)) {
-             return;
-         }
-
-         MySQLCommandPacket command = (MySQLCommandPacket) msg;
-         CommandExecutor executor = createExecutor(command, ctx);
-
-         try {
-             Collection<DatabasePacket> response = executor.execute();
-             for (DatabasePacket packet : response) {
-                 ctx.write(packet);
-             }
-             ctx.flush();
-         } catch (SQLException e) {
-             ctx.writeAndFlush(MySQLErrPacketFactory.newInstance(e));
-         }
-     }
-
-     private CommandExecutor createExecutor(MySQLCommandPacket command,
-                                            ChannelHandlerContext ctx) {
-         ConnectionSession session = ctx.channel().attr(SESSION_KEY).get();
-
-         if (command instanceof MySQLComQueryPacket) {
-             return new MilvusComQueryExecutor(
-                 (MySQLComQueryPacket) command, session, sqlExecutor);
-         } else if (command instanceof MySQLComPingPacket) {
-             return new MilvusComPingExecutor();
-         } else if (command instanceof MySQLComInitDbPacket) {
-             return new MilvusComInitDbExecutor(
-                 (MySQLComInitDbPacket) command, session);
-         } else if (command instanceof MySQLComQuitPacket) {
-             return new MilvusComQuitExecutor(ctx);
-         }
-         return new MilvusComUnsupportedExecutor(command);
-     }
-}
-
-4. CommandExecutor 接口
-
-public interface CommandExecutor {
-Collection<DatabasePacket> execute() throws SQLException;
-}
-
-5. MilvusComQueryExecutor
-
-public class MilvusComQueryExecutor implements CommandExecutor {
-
-     private final String sql;
-     private final ConnectionSession session;
-     private final SQLExecutor sqlExecutor;
-
-     @Override
-     public Collection<DatabasePacket> execute() throws SQLException {
-         QueryResult result = sqlExecutor.execute(sql);
-         return MySQLResponseBuilder.buildQueryResponse(result);
-     }
-}
-
-6. MySQLResponseBuilder
-
-public final class MySQLResponseBuilder {
-
-     public static Collection<DatabasePacket> buildQueryResponse(QueryResult result) {
-         List<DatabasePacket> packets = new ArrayList<>();
-
-         // Field count
-         packets.add(new MySQLFieldCountPacket(result.getColumns().size()));
-
-         // Column definitions
-         for (ColumnInfo column : result.getColumns()) {
-             packets.add(createColumnDefPacket(column));
-         }
-
-         // Rows
-         for (List<Object> row : result.getRows()) {
-             packets.add(new MySQLTextResultSetRowPacket(row));
-         }
-
-         // EOF/OK
-         packets.add(new MySQLOKPacket(0, 0, SERVER_STATUS_AUTOCOMMIT));
-
-         return packets;
-     }
-
-     public static DatabasePacket buildOKPacket(int affectedRows) {
-         return new MySQLOKPacket(affectedRows, 0, SERVER_STATUS_AUTOCOMMIT);
-     }
-
-     public static DatabasePacket buildErrorPacket(String message, int errorCode) {
-         return new MySQLErrPacket(errorCode, "42000", message);
-     }
-}
-
-7. ConnectionSession（简化版）
-
-public class ConnectionSession {
-private final int connectionId;
-private final Channel channel;
-private String currentDatabase;
-private volatile boolean authenticated;
-
-     // getters/setters
-}
-
-依赖调整
-
-build.gradle.kts
-
-dependencies {
-api(project(":milvus"))
-api(project(":core"))
-
-     // Netty
-     implementation("io.netty:netty-common:$nettyVersion")
-     implementation("io.netty:netty-transport:$nettyVersion")
-     implementation("io.netty:netty-handler:$nettyVersion")
-     implementation("io.netty:netty-codec:$nettyVersion")
-
-     // ShardingSphere: 仅协议层，不引入 proxy-backend
-     implementation("org.apache.shardingsphere:shardingsphere-protocol-mysql:$shardingsphereVersion")
-     implementation("org.apache.shardingsphere:shardingsphere-database-protocol-core:$shardingsphereVersion")
-
-     implementation("org.slf4j:slf4j-api")
-
-     // test
-     testImplementation(platform("org.junit:junit-bom:5.10.0"))
-     testImplementation("org.junit.jupiter:junit-jupiter")
-     testImplementation(project(":testkit"))
-     testImplementation("org.testcontainers:testcontainers")
-     testImplementation("mysql:mysql-connector-java:$mysqlConnectorVersion")
-     testImplementation(project(path = ":milvus", configuration = "testOutput"))
-}
 
 关键变更: 移除 shardingsphere-proxy-frontend-mysql 依赖，仅保留协议编解码包，避免引入 SS-Proxy 的完整后端。
-
-测试策略
-
-单元测试
-
-@DisplayName("MilvusComQueryExecutor 测试")
-class MilvusComQueryExecutorTest {
-
-     @Mock SQLExecutor sqlExecutor;
-     @Mock ConnectionSession session;
-
-     @Test
-     void shouldReturnQueryResponse() throws SQLException {
-         // given
-         when(sqlExecutor.execute("SELECT 1"))
-             .thenReturn(new QueryResult(...));
-
-         // when
-         MilvusComQueryExecutor executor = new MilvusComQueryExecutor(
-             new MySQLComQueryPacket("SELECT 1"), session, sqlExecutor);
-         Collection<DatabasePacket> result = executor.execute();
-
-         // then
-         assertThat(result).hasSize(4); // field_count + 1 col_def + 1 row + ok
-     }
-}
 
 集成测试
 
@@ -447,14 +278,14 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
 验证方式
 
 # 1. 编译
-./gradlew :milvus-sql-client:compileJava
+../gradlew :milvus-sql-client:compileJava
 
 # 2. 单元测试
-./gradlew :milvus-sql-client:test
+../gradlew :milvus-sql-client:test
 
 # 3. E2E 测试 (需要 Docker 运行 Milvus)
-./gradlew :milvus-sql-client:test --tests "*E2ETest"
+../gradlew :milvus-sql-client:test --tests "*E2ETest"
 
 # 4. 手动测试
-./gradlew :milvus-sql-client:run &
+../gradlew :milvus-sql-client:run &
 mysql -h 127.0.0.1 -P 3307 -e "SELECT * FROM milvus.test_collection"

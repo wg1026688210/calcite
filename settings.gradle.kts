@@ -87,7 +87,7 @@ include(
     "testkit",
     "ubenchmark",
     "milvus",
-    "milvus-sql-client"
+    "milvus-sql-gateway"
 )
 
 // See https://github.com/gradle/gradle/issues/1348#issuecomment-284758705 and
