@@ -20,6 +20,7 @@ import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
 import org.apache.calcite.adapter.milvus.sql.client.handler.MilvusChannelInitializer;
 
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
@@ -38,21 +39,28 @@ public class MilvusMySQLServer {
 
   public MilvusMySQLServer(MilvusServerConfig config) {
     this.config = config;
+    this.bossGroup = new NioEventLoopGroup(1);
+    this.workerGroup = new NioEventLoopGroup();
   }
 
   public void start() throws InterruptedException {
-    bossGroup = new NioEventLoopGroup(1);
-    workerGroup = new NioEventLoopGroup();
 
+    ServerBootstrap bootstrap = createBootstrap();
+    ChannelFuture future = bootstrap.bind(config.getHost(), config.getPort()).sync();
+    channel = future.channel();
+  }
+
+  ServerBootstrap createBootstrap() {
     ServerBootstrap bootstrap = new ServerBootstrap();
     bootstrap.group(bossGroup, workerGroup)
         .channel(NioServerSocketChannel.class)
         .childHandler(new MilvusChannelInitializer(config))
-        .option(ChannelOption.SO_BACKLOG, 128)
-        .childOption(ChannelOption.SO_KEEPALIVE, true);
-
-    ChannelFuture future = bootstrap.bind(config.getHost(), config.getPort()).sync();
-    channel = future.channel();
+        .option(ChannelOption.SO_BACKLOG, config.getBacklog())
+        .option(ChannelOption.SO_REUSEADDR, true)
+        .childOption(ChannelOption.SO_KEEPALIVE, true)
+        .childOption(ChannelOption.TCP_NODELAY, true)
+        .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+    return bootstrap;
   }
 
   public int getPort() {

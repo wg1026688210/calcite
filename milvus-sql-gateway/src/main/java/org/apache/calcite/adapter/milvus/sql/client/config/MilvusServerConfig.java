@@ -40,6 +40,12 @@ public class MilvusServerConfig {
   // Idle connection timeout (seconds), default 30 minutes
   private int idleTimeoutSeconds = 1800;
 
+  // Query timeout in seconds (default 30, 0 means no timeout)
+  private int queryTimeoutSeconds = 30;
+
+  // TCP accept backlog
+  private int backlog = 1024;
+
   public int getPort() {
     return port;
   }
@@ -148,5 +154,21 @@ public class MilvusServerConfig {
 
   public void setIdleTimeoutSeconds(int idleTimeoutSeconds) {
     this.idleTimeoutSeconds = idleTimeoutSeconds;
+  }
+
+  public int getQueryTimeoutSeconds() {
+    return queryTimeoutSeconds;
+  }
+
+  public void setQueryTimeoutSeconds(int queryTimeoutSeconds) {
+    this.queryTimeoutSeconds = queryTimeoutSeconds;
+  }
+
+  public int getBacklog() {
+    return backlog;
+  }
+
+  public void setBacklog(int backlog) {
+    this.backlog = backlog;
   }
 }

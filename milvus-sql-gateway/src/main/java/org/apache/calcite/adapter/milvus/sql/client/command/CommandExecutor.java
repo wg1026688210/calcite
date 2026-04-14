@@ -34,4 +34,13 @@ public interface CommandExecutor {
    * @throws SQLException if execution fails
    */
   Collection<DatabasePacket> execute() throws SQLException;
+
+  /**
+   * Closes any resources held by this executor.
+   *
+   * @throws SQLException if closing fails
+   */
+  default void close() throws SQLException {
+    // no-op by default
+  }
 }

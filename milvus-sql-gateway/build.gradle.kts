@@ -65,6 +65,32 @@ dependencies {
     testImplementation(project(path = ":milvus", configuration = "testOutput"))
 }
 
+plugins {
+    distribution
+}
+
+distributions {
+    main {
+        contents {
+            into("lib") {
+                from(tasks.jar)
+                from(configurations.runtimeClasspath)
+            }
+            into("conf") {
+                from("src/main/resources")
+            }
+            into("doc") {
+                from("docs")
+            }
+            into("bin") {
+                from("scripts")
+                include("*.sh")
+                fileMode = 0b111101101
+            }
+        }
+    }
+}
+
 // Fat JAR configuration
 tasks.register<Jar>("fatJar") {
     archiveClassifier.set("all")

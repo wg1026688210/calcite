@@ -30,6 +30,7 @@ import org.apache.shardingsphere.database.protocol.mysql.payload.MySQLPacketPayl
 import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 
@@ -48,14 +49,31 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
   private static final Logger LOGGER = LoggerFactory.getLogger(MilvusCommandDispatcher.class);
 
   private final SQLExecutor sqlExecutor;
+  private final ExecutorFactory executorFactory;
+
+  /**
+   * Functional interface for creating command executors.
+   * Package-private to allow injection in unit tests.
+   */
+  @FunctionalInterface
+  interface ExecutorFactory {
+    CommandExecutor create(MySQLCommandPacket command,
+        ChannelHandlerContext ctx, ConnectionSession session, SQLExecutor sqlExecutor);
+  }
 
   public MilvusCommandDispatcher(MilvusServerConfig config) {
-    this.sqlExecutor =
-        new SQLExecutor(config.getMilvusHost(),
+    this(new SQLExecutor(config.getMilvusHost(),
             config.getMilvusPort(),
             config.getMilvusDatabase(),
             config.getMilvusUsername(),
-            config.getMilvusPassword());
+            config.getMilvusPassword(),
+            config.getQueryTimeoutSeconds()),
+        MilvusCommandExecutorFactory::createExecutor);
+  }
+
+  MilvusCommandDispatcher(SQLExecutor sqlExecutor, ExecutorFactory executorFactory) {
+    this.sqlExecutor = sqlExecutor;
+    this.executorFactory = executorFactory;
   }
 
   @Override
@@ -78,13 +96,25 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
           handleCommandPacket(ctx, command);
         }
       } finally {
-        buffer.release();
+        safeRelease(buffer);
       }
       return;
     }
 
     // Forward other message types
     ctx.fireChannelRead(msg);
+  }
+
+  private void safeRelease(ByteBuf buffer) {
+    if (buffer instanceof CompositeByteBuf) {
+      CompositeByteBuf composite = (CompositeByteBuf) buffer;
+      int remainBytes = composite.readableBytes();
+      if (remainBytes > 0) {
+        composite.skipBytes(remainBytes);
+      }
+      composite.discardReadComponents();
+    }
+    buffer.release();
   }
 
   /**
@@ -112,13 +142,11 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
    * Handles MySQLCommandPacket execution.
    */
   private void handleCommandPacket(ChannelHandlerContext ctx, MySQLCommandPacket command) {
+    ctx.channel().config().setAutoRead(false);
+    CommandExecutor executor = null;
     try {
-
-
-      // Execute command
       ConnectionSession session = ctx.channel().attr(MilvusAuthHandler.SESSION_KEY).get();
-      CommandExecutor executor =
-          MilvusCommandExecutorFactory.createExecutor(command, ctx, session, sqlExecutor);
+      executor = executorFactory.create(command, ctx, session, sqlExecutor);
       Collection<DatabasePacket> response = executor.execute();
 
       // Write all response packets - use write() to collect, then single flush()
@@ -131,13 +159,43 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
       }
       ctx.flush();
     } catch (SQLException e) {
-      LOGGER.warn("[DISPATCH] SQL Error", e);
-      ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(e));
+      handleSqlException(ctx, e);
     } catch (Exception e) {
       LOGGER.error("[DISPATCH] Unexpected error", e);
       ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(
           "Internal error: " + e.getMessage(), 1105, "HY000"));
+    } finally {
+      ctx.channel().config().setAutoRead(true);
+      if (executor != null) {
+        try {
+          executor.close();
+        } catch (SQLException e) {
+          LOGGER.warn("[DISPATCH] Failed to close executor", e);
+        }
+      }
     }
+  }
+
+  private void handleSqlException(ChannelHandlerContext ctx, SQLException e) {
+    if (isExpectedSqlException(e)) {
+      LOGGER.warn("[DISPATCH] SQL Error: {}", e.getMessage());
+    } else {
+      LOGGER.error("[DISPATCH] SQL Error", e);
+    }
+    ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(e));
+  }
+
+  private boolean isExpectedSqlException(SQLException e) {
+    String sqlState = e.getSQLState();
+    int errorCode = e.getErrorCode();
+    // Syntax error, unknown database, table not exist, unknown column
+    if ("42000".equals(sqlState) || "42S02".equals(sqlState) || "42S22".equals(sqlState)) {
+      return true;
+    }
+    if (errorCode == 1049 || errorCode == 1146 || errorCode == 1054 || errorCode == 1064) {
+      return true;
+    }
+    return false;
   }
 
 }

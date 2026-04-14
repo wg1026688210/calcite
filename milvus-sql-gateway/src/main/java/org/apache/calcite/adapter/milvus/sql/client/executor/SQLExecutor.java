@@ -44,14 +44,16 @@ public class SQLExecutor {
   private final String milvusDatabase;
   private final String milvusUsername;
   private final String milvusPassword;
+  private final int queryTimeoutSeconds;
 
   public SQLExecutor(String milvusHost, int milvusPort, String milvusDatabase,
-      String milvusUsername, String milvusPassword) {
+      String milvusUsername, String milvusPassword, int queryTimeoutSeconds) {
     this.milvusHost = milvusHost;
     this.milvusPort = milvusPort;
     this.milvusDatabase = milvusDatabase;
     this.milvusUsername = milvusUsername;
     this.milvusPassword = milvusPassword;
+    this.queryTimeoutSeconds = queryTimeoutSeconds;
   }
 
 
@@ -76,6 +78,9 @@ public class SQLExecutor {
 
     try (Connection connection = createConnection(currentDatabase)) {
       try (Statement statement = connection.createStatement()) {
+        if (queryTimeoutSeconds > 0) {
+          statement.setQueryTimeout(queryTimeoutSeconds);
+        }
         boolean hasResultSet = statement.execute(sql);
         if (hasResultSet) {
           try (ResultSet rs = statement.getResultSet()) {
@@ -96,7 +101,7 @@ public class SQLExecutor {
     return info;
   }
 
-  private Connection createConnection(String currentDatabase) throws SQLException {
+  protected Connection createConnection(String currentDatabase) throws SQLException {
     Properties info = createCalciteProperties();
 
     final Driver driver = new Driver().withPrepareFactory(MilvusPrepareImpl::new);
