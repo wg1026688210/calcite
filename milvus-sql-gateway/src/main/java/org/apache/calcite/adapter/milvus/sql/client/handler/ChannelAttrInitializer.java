@@ -14,23 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.calcite.adapter.milvus.sql.client.command;
+package org.apache.calcite.adapter.milvus.sql.client.handler;
 
-import org.apache.calcite.adapter.milvus.sql.client.response.MySQLResponseBuilder;
+import org.apache.shardingsphere.database.protocol.constant.CommonConstants;
 
-import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 
-import java.sql.SQLException;
-import java.util.Collection;
-import java.util.Collections;
+import java.nio.charset.Charset;
 
 /**
- * Executor for MySQL COM_PING commands.
- * Returns OK packet to indicate server is alive.
+ * Channel attributes initializer.
+ * Replaces ShardingSphere proxy-frontend dependency with inline implementation.
  */
-public class MilvusComPingExecutor implements CommandExecutor {
+public final class ChannelAttrInitializer extends ChannelInboundHandlerAdapter {
 
-  @Override public Collection<DatabasePacket> execute() throws SQLException {
-    return Collections.singletonList(MySQLResponseBuilder.buildOKPacket());
+  @Override
+  public void channelActive(final ChannelHandlerContext ctx) {
+    ctx.channel().attr(CommonConstants.CHARSET_ATTRIBUTE_KEY).setIfAbsent(Charset.defaultCharset());
+    ctx.fireChannelActive();
   }
 }

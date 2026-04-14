@@ -55,6 +55,13 @@ public class MilvusMySQLServer {
     channel = future.channel();
   }
 
+  public int getPort() {
+    if (channel != null && channel.localAddress() instanceof java.net.InetSocketAddress) {
+      return ((java.net.InetSocketAddress) channel.localAddress()).getPort();
+    }
+    return config.getPort();
+  }
+
   public void stop() {
     if (channel != null) {
       channel.close();

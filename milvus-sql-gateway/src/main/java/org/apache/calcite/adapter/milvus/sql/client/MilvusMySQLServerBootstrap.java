@@ -24,9 +24,6 @@ import org.apache.shardingsphere.database.protocol.constant.DatabaseProtocolServ
 public class MilvusMySQLServerBootstrap {
 
   public static void main(String[] args) throws Exception {
-    // Set MySQL protocol version to 8.0.30 for MySQL CLI 8.0+ compatibility
-    // This prevents CLI from entering 5.7 compatibility mode and sending incompatible queries
-    DatabaseProtocolServerInfo.setProtocolVersion("MySQL", "8.0.30");
 
     // Load configuration from YAML file or use defaults
     MilvusServerConfig config;

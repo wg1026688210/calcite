@@ -38,14 +38,14 @@ import java.util.Map;
  */
 @ExtendWith(MilvusExtension.class)
 public class RawSocketTest extends MilvusBaseE2ETest {
-  private static final int MYSQL_PORT = 13308;
+  private static int mysqlPort;
   private static MilvusMySQLServer server;
 
   @BeforeAll
   static void setupServer() throws Exception {
     Map<String, Object> params = MilvusExtension.getConnectionParams();
     MilvusServerConfig config = new MilvusServerConfig();
-    config.setPort(MYSQL_PORT);
+    config.setPort(0);
     config.setHost("127.0.0.1");
     config.setMilvusHost((String) params.get("host"));
     config.setMilvusPort((Integer) params.get("port"));
@@ -53,13 +53,14 @@ public class RawSocketTest extends MilvusBaseE2ETest {
 
     server = new MilvusMySQLServer(config);
     server.start();
+    mysqlPort = server.getPort();
 
     Thread.sleep(1000);
   }
 
   @Test @Disabled("Debug test - may timeout due to socket read")
   public void testRawSocket() throws Exception {
-    try (Socket socket = new Socket("127.0.0.1", MYSQL_PORT)) {
+    try (Socket socket = new Socket("127.0.0.1", mysqlPort)) {
       socket.setSoTimeout(10000);
       InputStream in = socket.getInputStream();
       OutputStream out = socket.getOutputStream();
@@ -236,20 +237,28 @@ public class RawSocketTest extends MilvusBaseE2ETest {
     baos.write(0x00);  // null terminator
 
     // Auth response - must be formatted according to capability flags
+    // Provide a non-empty response to avoid auth switch (server allows empty password)
     if (useLenencAuth) {
       // CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA: length-encoded integer for length
-      baos.write(0x00);  // length 0 (length-encoded integer)
+      baos.write(0x14);  // length 20
+      for (int i = 0; i < 20; i++) {
+        baos.write(0x00);
+      }
     } else if (useSecureConnection) {
       // CLIENT_SECURE_CONNECTION: 1 byte length prefix
-      baos.write(0x00);  // length 0
+      baos.write(0x14);  // length 20
+      for (int i = 0; i < 20; i++) {
+        baos.write(0x00);
+      }
     } else {
       // Old style: null-terminated string
       baos.write(0x00);  // empty null-terminated string
     }
 
     // Auth plugin name (null-terminated string) - required when CLIENT_PLUGIN_AUTH is set
+    // Use caching_sha2_password to match server default (MySQL 8.0+ compatible)
     if (usePluginAuth) {
-      byte[] pluginName = "mysql_native_password\0".getBytes(StandardCharsets.UTF_8);
+      byte[] pluginName = "caching_sha2_password\0".getBytes(StandardCharsets.UTF_8);
       for (byte b : pluginName) {
         baos.write(b);
       }
@@ -393,7 +402,7 @@ public class RawSocketTest extends MilvusBaseE2ETest {
   
   public void testRawSocketMySQLCLI() throws Exception {
     // This test simulates MySQL 8.0/9.6 CLI client behavior
-    try (Socket socket = new Socket("127.0.0.1", MYSQL_PORT)) {
+    try (Socket socket = new Socket("127.0.0.1", mysqlPort)) {
       socket.setSoTimeout(10000);
       InputStream in = socket.getInputStream();
       OutputStream out = socket.getOutputStream();

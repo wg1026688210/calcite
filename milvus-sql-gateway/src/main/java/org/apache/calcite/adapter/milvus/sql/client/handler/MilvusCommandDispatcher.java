@@ -17,11 +17,8 @@
 package org.apache.calcite.adapter.milvus.sql.client.handler;
 
 import org.apache.calcite.adapter.milvus.sql.client.command.CommandExecutor;
-import org.apache.calcite.adapter.milvus.sql.client.command.MilvusComInitDbExecutor;
-import org.apache.calcite.adapter.milvus.sql.client.command.MilvusComPingExecutor;
-import org.apache.calcite.adapter.milvus.sql.client.command.MilvusComQueryExecutor;
-import org.apache.calcite.adapter.milvus.sql.client.command.MilvusComQuitExecutor;
-import org.apache.calcite.adapter.milvus.sql.client.command.MilvusComUnsupportedExecutor;
+import org.apache.calcite.adapter.milvus.sql.client.command.MilvusCommandExecutorFactory;
+import org.apache.calcite.adapter.milvus.sql.client.command.MilvusCommandPacketFactory;
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
 import org.apache.calcite.adapter.milvus.sql.client.executor.SQLExecutor;
 import org.apache.calcite.adapter.milvus.sql.client.response.MySQLResponseBuilder;
@@ -29,17 +26,15 @@ import org.apache.calcite.adapter.milvus.sql.client.session.ConnectionSession;
 
 import org.apache.shardingsphere.database.protocol.mysql.packet.command.MySQLCommandPacket;
 import org.apache.shardingsphere.database.protocol.mysql.packet.command.MySQLCommandPacketType;
-import org.apache.shardingsphere.database.protocol.mysql.packet.command.admin.initdb.MySQLComInitDbPacket;
-import org.apache.shardingsphere.database.protocol.mysql.packet.command.admin.ping.MySQLComPingPacket;
-import org.apache.shardingsphere.database.protocol.mysql.packet.command.admin.quit.MySQLComQuitPacket;
-import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.text.fieldlist.MySQLComFieldListPacket;
-import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.text.query.MySQLComQueryPacket;
 import org.apache.shardingsphere.database.protocol.mysql.payload.MySQLPacketPayload;
 import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 import java.util.Collection;
@@ -49,6 +44,8 @@ import java.util.Collection;
  * This is the command layer handler that routes commands to business logic.
  */
 public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(MilvusCommandDispatcher.class);
 
   private final SQLExecutor sqlExecutor;
 
@@ -63,7 +60,7 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
 
   @Override
   public void channelRead(ChannelHandlerContext ctx, Object msg) {
-    System.err.println("[DISPATCH] Received message type: " + msg.getClass().getName());
+    LOGGER.debug("[DISPATCH] Received message type: {}", msg.getClass().getName());
 
     // Handle ByteBuf (raw data from codec)
     if (msg instanceof ByteBuf) {
@@ -74,7 +71,7 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
         buffer.release();
         return;
       }
-      System.err.println("[DISPATCH] Received buffer with " + buffer.readableBytes() + " bytes");
+      LOGGER.debug("[DISPATCH] Received buffer with {} bytes", buffer.readableBytes());
       try {
         MySQLCommandPacket command = parseCommandPacket(ctx, buffer);
         if (command != null) {
@@ -102,12 +99,11 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
 
       int commandTypeInt = payload.readInt1();
       MySQLCommandPacketType commandType = MySQLCommandPacketType.valueOf(commandTypeInt);
-      System.err.println("[DISPATCH] Command type: " + commandType + " (" + commandTypeInt + ")");
+      LOGGER.debug("[DISPATCH] Command type: {} ({})", commandType, commandTypeInt);
 
-      return createCommandPacket(commandType, payload);
+      return MilvusCommandPacketFactory.createCommandPacket(commandType, payload);
     } catch (Exception e) {
-      System.err.println("[DISPATCH] Failed to parse command packet: " + e.getMessage());
-      e.printStackTrace();
+      LOGGER.warn("[DISPATCH] Failed to parse command packet", e);
       return null;
     }
   }
@@ -120,7 +116,9 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
 
 
       // Execute command
-      CommandExecutor executor = createExecutor(command, ctx);
+      ConnectionSession session = ctx.channel().attr(MilvusAuthHandler.SESSION_KEY).get();
+      CommandExecutor executor =
+          MilvusCommandExecutorFactory.createExecutor(command, ctx, session, sqlExecutor);
       Collection<DatabasePacket> response = executor.execute();
 
       // Write all response packets - use write() to collect, then single flush()
@@ -129,60 +127,17 @@ public class MilvusCommandDispatcher extends ChannelInboundHandlerAdapter {
       for (DatabasePacket packet : response) {
         ctx.write(packet);
         packetCount++;
-        System.err.println(
-            "[DISPATCH] Queued packet " + packetCount + ": " + packet.getClass().getSimpleName());
+        LOGGER.debug("[DISPATCH] Queued packet {}: {}", packetCount, packet.getClass().getSimpleName());
       }
       ctx.flush();
     } catch (SQLException e) {
-      System.err.println("[DISPATCH] SQL Error: " + e.getMessage());
+      LOGGER.warn("[DISPATCH] SQL Error", e);
       ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(e));
     } catch (Exception e) {
-      System.err.println("[DISPATCH] Unexpected error:");
-      e.printStackTrace();
+      LOGGER.error("[DISPATCH] Unexpected error", e);
       ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(
           "Internal error: " + e.getMessage(), 1105, "HY000"));
     }
-  }
-
-  private MySQLCommandPacket createCommandPacket(MySQLCommandPacketType type,
-      MySQLPacketPayload payload) {
-    switch (type) {
-    case COM_QUERY:
-      return new MySQLComQueryPacket(payload);
-    case COM_PING:
-      return new MySQLComPingPacket();
-    case COM_INIT_DB:
-      return new MySQLComInitDbPacket(payload);
-    case COM_QUIT:
-      return new MySQLComQuitPacket();
-    case COM_FIELD_LIST:
-      return new MySQLComFieldListPacket(payload);
-    default:
-      // For unsupported commands
-      throw new UnsupportedOperationException("Unsupported command type: " + type);
-    }
-  }
-
-  private CommandExecutor createExecutor(MySQLCommandPacket command,
-      ChannelHandlerContext ctx) {
-    ConnectionSession session = ctx.channel().attr(MilvusAuthHandler.SESSION_KEY).get();
-
-    if (command instanceof MySQLComQueryPacket) {
-      return new MilvusComQueryExecutor(
-          (MySQLComQueryPacket) command, session, sqlExecutor);
-    } else if (command instanceof MySQLComPingPacket) {
-      return new MilvusComPingExecutor();
-    } else if (command instanceof MySQLComInitDbPacket) {
-      return new MilvusComInitDbExecutor(
-          (MySQLComInitDbPacket) command, session, sqlExecutor);
-    } else if (command instanceof MySQLComQuitPacket) {
-      return new MilvusComQuitExecutor(ctx);
-    } else if (command instanceof MySQLComFieldListPacket) {
-      // Field list is not supported in this implementation
-      return new MilvusComUnsupportedExecutor(command);
-    }
-
-    return new MilvusComUnsupportedExecutor(command);
   }
 
 }

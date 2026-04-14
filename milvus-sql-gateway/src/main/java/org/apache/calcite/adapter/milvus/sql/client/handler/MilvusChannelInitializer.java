@@ -27,8 +27,6 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
 
-import org.apache.shardingsphere.proxy.frontend.netty.ChannelAttrInitializer;
-
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -59,10 +57,7 @@ public class MilvusChannelInitializer extends ChannelInitializer<SocketChannel> 
         // Idle detection: close connection if no read/write for specified seconds
         .addLast(new IdleStateHandler(0, 0, config.getIdleTimeoutSeconds()))
 
-        // Layer 2: Authentication Handler
-        .addLast(new MilvusAuthHandler(config))
-
-        // Layer 3: Command Dispatcher
-        .addLast(new MilvusCommandDispatcher(config));
+        // Layer 2+3: Unified Frontend Handler (Authentication + Command Dispatch)
+        .addLast(new MilvusFrontendHandler(config));
   }
 }

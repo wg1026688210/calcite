@@ -17,6 +17,7 @@
 package org.apache.calcite.adapter.milvus.sql.client.handler;
 
 import org.apache.calcite.adapter.milvus.sql.client.auth.MilvusAuthenticator;
+import org.apache.calcite.adapter.milvus.sql.client.auth.MySQLCachingSha2PasswordAuthenticator;
 import org.apache.calcite.adapter.milvus.sql.client.auth.MySQLClearPasswordAuthenticator;
 import org.apache.calcite.adapter.milvus.sql.client.auth.MySQLNativePasswordAuthenticator;
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
@@ -43,6 +44,9 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.AttributeKey;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -51,6 +55,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * real password validation, SSL upgrade, and auth switch support.
  */
 public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(MilvusAuthHandler.class);
 
   public static final AttributeKey<ConnectionSession> SESSION_KEY =
       AttributeKey.valueOf("milvus.session");
@@ -69,6 +75,10 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
   private String currentDatabase;
   private int clientCapabilityFlags;
 
+  // MySQL capability flags not exposed by ShardingSphere MySQLCapabilityFlag enum
+  private static final int CLIENT_QUERY_ATTRIBUTES = 0x08000000;
+  private static final int MULTI_FACTOR_AUTHENTICATION = 0x10000000;
+
   public MilvusAuthHandler(MilvusServerConfig config) {
     this.config = config;
     this.handshakeComplete = false;
@@ -80,7 +90,7 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
 
   @Override public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
     if (handshakeComplete) {
-      ctx.fireChannelRead(msg);
+      // Unified frontend handler routes to dispatcher; do not forward
       return;
     }
     if (!(msg instanceof ByteBuf)) {
@@ -136,10 +146,10 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
       currentUsername = response.getUsername();
       currentDatabase = response.getDatabase();
       clientCapabilityFlags = response.getCapabilityFlags();
-      System.err.println("[AUTH] Handshake received - user: " + currentUsername
-          + ", database: " + currentDatabase
-          + ", authResponse length: " + (authResponse != null ? authResponse.length : 0)
-          + ", capabilityFlags: 0x" + Integer.toHexString(clientCapabilityFlags));
+      LOGGER.debug("[AUTH] Handshake received - user: {}, database: {}, authResponse length: {}, capabilityFlags: 0x{}",
+          currentUsername, currentDatabase,
+          authResponse != null ? authResponse.length : 0,
+          Integer.toHexString(clientCapabilityFlags));
 
       setMultiStatementsOption(ctx, response);
       setCharacterSet(ctx, response);
@@ -155,12 +165,8 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
 
       completeAuthentication(ctx, authenticator);
     } catch (Exception e) {
-      System.err.println("[AUTH] Exception during handshake processing:");
-      e.printStackTrace();
-      ctx.writeAndFlush(
-          MySQLResponseBuilder.buildErrorPacket(
-          "Access denied: " + e.getMessage(), 1045, "28000"));
-      ctx.close();
+      LOGGER.warn("[AUTH] Exception during handshake processing", e);
+      sendAuthErrorAndClose(ctx, "Access denied: " + e.getMessage());
     }
   }
 
@@ -173,10 +179,7 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
       authResponse = response.getAuthPluginResponse();
       completeAuthentication(ctx, createAuthenticator(config.getAuthPlugin()));
     } catch (Exception e) {
-      ctx.writeAndFlush(
-          MySQLResponseBuilder.buildErrorPacket(
-          "Access denied: " + e.getMessage(), 1045, "28000"));
-      ctx.close();
+      sendAuthErrorAndClose(ctx, "Access denied: " + e.getMessage());
     }
   }
 
@@ -189,49 +192,47 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
     String configuredUsername = config.getMysqlUsername();
     String configuredPassword = config.getMysqlPassword();
 
-    System.err.println("[AUTH] Authenticating user: " + currentUsername + ", expected: " + configuredUsername);
+    LOGGER.debug("[AUTH] Authenticating user: {}, expected: {}", currentUsername, configuredUsername);
     if (configuredUsername != null && !configuredUsername.isEmpty()) {
       if (!configuredUsername.equals(currentUsername)) {
-        System.err.println("[AUTH] Username mismatch: " + currentUsername + " != " + configuredUsername);
-        ctx.writeAndFlush(
-            MySQLResponseBuilder.buildErrorPacket(
-            "Access denied for user '" + currentUsername + "'", 1045, "28000"));
-        ctx.close();
+        LOGGER.warn("[AUTH] Username mismatch: {} != {}", currentUsername, configuredUsername);
+        sendAuthErrorAndClose(ctx, "Access denied for user '" + currentUsername + "'");
         return;
       }
-      System.err.println("[AUTH] Validating password...");
+      LOGGER.debug("[AUTH] Validating password...");
       if (!authenticator.authenticate(configuredPassword, authResponse, authPluginData)) {
-        System.err.println("[AUTH] Password validation failed");
-        ctx.writeAndFlush(
-            MySQLResponseBuilder.buildErrorPacket(
-            "Access denied for user '" + currentUsername + "'", 1045, "28000"));
-        ctx.close();
+        LOGGER.warn("[AUTH] Password validation failed");
+        sendAuthErrorAndClose(ctx, "Access denied for user '" + currentUsername + "'");
         return;
       }
-      System.err.println("[AUTH] Password validated successfully");
+      LOGGER.debug("[AUTH] Password validated successfully");
     }
 
     ConnectionSession session =
-        new ConnectionSession(connectionId, ctx.channel(),
+        new ConnectionSession(connectionId,
         currentDatabase != null ? currentDatabase : config.getMilvusDatabase());
     session.setAuthenticated(true);
     // Mask out unsupported capability flags to prevent protocol issues
-    // CLIENT_SESSION_TRACK (0x800000) requires special OK packet format
-    // CLIENT_QUERY_ATTRIBUTES (0x8000000) and MFA (0x10000000) not supported
+    // CLIENT_SESSION_TRACK requires special OK packet format
+    // CLIENT_QUERY_ATTRIBUTES and MULTI_FACTOR_AUTHENTICATION are not supported
     // Note: Keep CLIENT_DEPRECATE_EOF as-is to respect client preference
     int maskedCapabilityFlags = clientCapabilityFlags
-        & ~0x00800000  // CLIENT_SESSION_TRACK
-        & ~0x08000000  // CLIENT_QUERY_ATTRIBUTES
-        & ~0x10000000; // MULTI_FACTOR_AUTHENTICATION
+        & ~MySQLCapabilityFlag.CLIENT_SESSION_TRACK.getValue()
+        & ~CLIENT_QUERY_ATTRIBUTES
+        & ~MULTI_FACTOR_AUTHENTICATION;
     session.setCapabilityFlags(maskedCapabilityFlags);
     ctx.channel().attr(SESSION_KEY).set(session);
-    System.err.println("[AUTH] Authentication complete, session created for: " + currentUsername);
+    LOGGER.debug("[AUTH] Authentication complete, session created for: {}", currentUsername);
 
     // Set handshakeComplete BEFORE write to avoid race condition
     // Client may send next packet immediately after receiving OK
     handshakeComplete = true;
-    ctx.writeAndFlush(MySQLResponseBuilder.buildOKPacket(0));
-    System.err.println("[AUTH] OK packet sent, handshake complete");
+    ctx.writeAndFlush(MySQLResponseBuilder.buildOKPacket());
+    LOGGER.debug("[AUTH] OK packet sent, handshake complete");
+  }
+
+  public boolean isHandshakeComplete() {
+    return handshakeComplete;
   }
 
   private boolean shouldAuthSwitch(MySQLHandshakeResponse41Packet response,
@@ -275,6 +276,8 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
         return new MySQLNativePasswordAuthenticator();
       case CLEAR_TEXT:
         return new MySQLClearPasswordAuthenticator();
+      case CACHING_SHA2_PASSWORD:
+        return new MySQLCachingSha2PasswordAuthenticator();
       default:
         return new MySQLNativePasswordAuthenticator();
     }
@@ -292,8 +295,23 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
     return MySQLAuthenticationMethod.NATIVE;
   }
 
+  /**
+   * Sends an authentication error packet and closes the connection.
+   */
+  private void sendAuthErrorAndClose(ChannelHandlerContext ctx, String message) {
+    ctx.writeAndFlush(MySQLResponseBuilder.buildErrorPacket(message, 1045, "28000"));
+    ctx.close();
+  }
+
+  /**
+   * Gets the connection session from a channel.
+   */
+  public static ConnectionSession getSession(io.netty.channel.Channel channel) {
+    return channel.attr(SESSION_KEY).get();
+  }
+
   @Override public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-    cause.printStackTrace();
+    LOGGER.error("[AUTH] Unhandled exception", cause);
     ctx.close();
   }
 
@@ -303,9 +321,7 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
       int connectionId = session != null ? session.getConnectionId() : -1;
       String database = session != null ? session.getCurrentDatabase() : "NONE";
 
-      System.err.println("[MilvusAuthHandler] Connection " + connectionId
-          + " idle timeout after " + config.getIdleTimeoutSeconds()
-          + "s, closing. database: " + database);
+      LOGGER.warn("[MilvusAuthHandler] Connection {} idle timeout after {}s, closing. database: {}", connectionId, config.getIdleTimeoutSeconds(), database);
       ctx.close();
       return;
     }
@@ -315,7 +331,7 @@ public class MilvusAuthHandler extends ChannelInboundHandlerAdapter {
   @Override public void channelInactive(ChannelHandlerContext ctx) throws Exception {
     ConnectionSession session = ctx.channel().attr(SESSION_KEY).get();
     if (session != null) {
-      System.err.println("[MilvusAuthHandler] Connection " + session.getConnectionId() + " closed");
+      LOGGER.debug("[MilvusAuthHandler] Connection {} closed", session.getConnectionId());
       ctx.channel().attr(SESSION_KEY).set(null);
     }
     ctx.fireChannelInactive();

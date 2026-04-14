@@ -46,12 +46,12 @@ dependencies {
     // ShardingSphere: only protocol layer, no proxy-frontend
     implementation("org.apache.shardingsphere:shardingsphere-protocol-mysql:$shardingsphereVersion")
     implementation("org.apache.shardingsphere:shardingsphere-database-protocol-core:$shardingsphereVersion")
-    implementation("org.apache.shardingsphere:shardingsphere-proxy-frontend-mysql:$shardingsphereVersion")
 
     implementation("org.slf4j:slf4j-api")
 
     // BouncyCastle for auto SSL certificate generation (like ShardingSphere)
     implementation("org.bouncycastle:bcprov-jdk18on:1.78")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.78")
 
     // YAML configuration support
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.0")

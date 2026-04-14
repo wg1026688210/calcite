@@ -20,6 +20,7 @@ import org.apache.calcite.adapter.milvus.MilvusBaseE2ETest;
 import org.apache.calcite.adapter.milvus.extension.MilvusExtension;
 import org.apache.calcite.adapter.milvus.sql.client.config.MilvusServerConfig;
 import org.apache.calcite.adapter.milvus.sql.client.server.MilvusMySQLServer;
+import org.apache.calcite.adapter.milvus.sql.client.ssl.MilvusSslContextFactory;
 import org.apache.calcite.adapter.milvus.util.TestEnvUtil;
 
 import org.junit.jupiter.api.AfterAll;
@@ -42,7 +43,7 @@ import java.util.Map;
 @ExtendWith(MilvusExtension.class)
 public class MilvusMySQLSslE2ETest extends MilvusBaseE2ETest {
 
-  private static final int MYSQL_PORT = 13310;
+  private static int mysqlPort;
   private static MilvusMySQLServer server;
 
   @BeforeAll
@@ -57,7 +58,7 @@ public class MilvusMySQLSslE2ETest extends MilvusBaseE2ETest {
 
     Map<String, Object> params = MilvusExtension.getConnectionParams();
     MilvusServerConfig config = new MilvusServerConfig();
-    config.setPort(MYSQL_PORT);
+    config.setPort(0);
     config.setHost("127.0.0.1");
     config.setMilvusHost((String) params.get("host"));
     config.setMilvusPort((Integer) params.get("port"));
@@ -65,8 +66,12 @@ public class MilvusMySQLSslE2ETest extends MilvusBaseE2ETest {
     // Enable SSL with auto-generated certificate (no keystore config needed)
     config.setSslEnabled(true);
 
+    // Pre-warm SSL context to avoid timeout on first connection (4096-bit RSA generation is expensive)
+    MilvusSslContextFactory.getInstance();
+
     server = new MilvusMySQLServer(config);
     server.start();
+    mysqlPort = server.getPort();
 
     Thread.sleep(1000);
   }
@@ -236,14 +241,14 @@ public class MilvusMySQLSslE2ETest extends MilvusBaseE2ETest {
     String mysqlVersion = System.getProperty("mysql.driver.version", "8.0");
     if (mysqlVersion.startsWith("5.")) {
       // MySQL 5.1 只支持基本的 useSSL 参数
-      return "jdbc:mysql://127.0.0.1:" + MYSQL_PORT + "/default?" +
+      return "jdbc:mysql://127.0.0.1:" + mysqlPort + "/default?" +
           "connectTimeout=10000&" +
           "socketTimeout=10000&" +
           "useSSL=true&" +
           "serverTimezone=UTC";
     }
     // MySQL 8.0+ 支持完整的 SSL 参数
-    return "jdbc:mysql://127.0.0.1:" + MYSQL_PORT + "/default?" +
+    return "jdbc:mysql://127.0.0.1:" + mysqlPort + "/default?" +
         "connectTimeout=10000&" +
         "socketTimeout=10000&" +
         "useSSL=true&" +
@@ -257,7 +262,7 @@ public class MilvusMySQLSslE2ETest extends MilvusBaseE2ETest {
    * Builds JDBC URL for non-SSL connection to SSL-enabled server (MySQL 5.1 driver).
    */
   private String buildNonSslJdbcUrl() {
-    return "jdbc:mysql://127.0.0.1:" + MYSQL_PORT + "/default?" +
+    return "jdbc:mysql://127.0.0.1:" + mysqlPort + "/default?" +
         "connectTimeout=10000&" +
         "socketTimeout=10000&" +
         "useSSL=false&" +

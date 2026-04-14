@@ -18,6 +18,7 @@ package org.apache.calcite.adapter.milvus.sql.client.executor;
 
 import org.apache.calcite.adapter.milvus.factory.MilvusSchema;
 import org.apache.calcite.adapter.milvus.hint.MilvusPrepareImpl;
+import org.apache.calcite.adapter.milvus.sql.client.config.SystemVariables;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.schema.SchemaPlus;
@@ -27,13 +28,17 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Types;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class SQLExecutor {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(SQLExecutor.class);
+
   private final String milvusHost;
   private final int milvusPort;
   private final String milvusDatabase;
@@ -65,56 +70,7 @@ public class SQLExecutor {
       }
     }
     String upperSql = trimmedSql.toUpperCase();
-    if (upperSql.startsWith("SET ")) {
-      return new QueryResult(new ArrayList<>(), new ArrayList<>(), 0);
-    }
-    if (upperSql.startsWith("SHOW VARIABLES")) {
-      List<ColumnInfo> columns = new ArrayList<>();
-      columns.add(new ColumnInfo("Variable_name", Types.VARCHAR, "VARCHAR"));
-      columns.add(new ColumnInfo("Value", Types.VARCHAR, "VARCHAR"));
-      List<List<Object>> rows = new ArrayList<>();
-      rows.add(Arrays.asList("character_set_client", "utf8"));
-      rows.add(Arrays.asList("character_set_connection", "utf8"));
-      rows.add(Arrays.asList("character_set_results", "utf8"));
-      rows.add(Arrays.asList("character_set_server", "utf8"));
-      rows.add(Arrays.asList("time_zone", "UTC"));
-      rows.add(Arrays.asList("system_time_zone", "UTC"));
-      rows.add(Arrays.asList("max_allowed_packet", "16777216"));
-      rows.add(Arrays.asList("net_buffer_length", "16384"));
-      rows.add(Arrays.asList("sql_mode", "STRICT_TRANS_TABLES"));
-      rows.add(Arrays.asList("lower_case_table_names", "0"));
-      rows.add(Arrays.asList("wait_timeout", "28800"));
-      rows.add(Arrays.asList("interactive_timeout", "28800"));
-      rows.add(Arrays.asList("auto_increment_increment", "1"));
-      return new QueryResult(columns, rows, 0);
-    }
-    if (upperSql.startsWith("SELECT @@SESSION.")) {
-      return buildSessionVariableResult(trimmedSql, "@@session.");
-    }
-    if (upperSql.startsWith("SELECT @@GLOBAL.")) {
-      return buildSessionVariableResult(trimmedSql, "@@global.");
-    }
-    if (upperSql.startsWith("SHOW DATABASES") || upperSql.startsWith("SHOW SCHEMAS")) {
-      return buildShowDatabasesResult();
-    }
-    if (upperSql.matches("(?i)^SELECT\\s+DATABASE\\s*\\(\\s*\\)\\s*;?$")) {
-      List<ColumnInfo> columns = new ArrayList<>();
-      columns.add(new ColumnInfo("DATABASE()", Types.VARCHAR, "VARCHAR"));
-      List<List<Object>> rows = new ArrayList<>();
-      rows.add(Arrays.asList(currentDatabase != null ? currentDatabase : ""));
-      return new QueryResult(columns, rows, 0);
-    }
-    if (upperSql.startsWith("SHOW TABLES")) {
-      return buildShowTablesResult(currentDatabase);
-    }
-    if (upperSql.startsWith("SHOW SESSION STATUS") ||
-        upperSql.startsWith("SHOW COLLATION") ||
-        upperSql.startsWith("SHOW CHARACTER SET")) {
-      List<ColumnInfo> columns = new ArrayList<>();
-      columns.add(new ColumnInfo("Variable_name", Types.VARCHAR, "VARCHAR"));
-      columns.add(new ColumnInfo("Value", Types.VARCHAR, "VARCHAR"));
-      return new QueryResult(columns, new ArrayList<>(), 0);
-    }
+    // System variable queries are handled by SystemVariableHandler at the command layer.
 
 
 
@@ -132,11 +88,16 @@ public class SQLExecutor {
     }
   }
 
-  private Connection createConnection(String currentDatabase) throws SQLException {
+  private static Properties createCalciteProperties() {
     Properties info = new Properties();
     info.setProperty("lex", "mysql");
     info.setProperty("fun", "milvus");
     info.setProperty("defaultCharset", "UTF-8");
+    return info;
+  }
+
+  private Connection createConnection(String currentDatabase) throws SQLException {
+    Properties info = createCalciteProperties();
 
     final Driver driver = new Driver().withPrepareFactory(MilvusPrepareImpl::new);
     Connection connection = driver.connect("jdbc:calcite:", info);
@@ -172,7 +133,7 @@ public class SQLExecutor {
   /**
    * Lists all databases from Milvus server using MilvusClientV2.
    */
-  private List<String> listMilvusDatabases() {
+  public List<String> listMilvusDatabases() {
     List<String> databases = new ArrayList<>();
     try {
       // Connect to Milvus using v2 SDK to list databases
@@ -193,13 +154,13 @@ public class SQLExecutor {
       client.close();
     } catch (Exception e) {
       // Fallback to default database if cannot connect
-      System.err.println("[SQLExecutor] Failed to list databases: " + e.getMessage());
+      LOGGER.warn("[SQLExecutor] Failed to list databases: {}", e.getMessage());
       databases.add(milvusDatabase);
     }
     return databases;
   }
 
-  private MilvusSchema createMilvusSchema(String databaseName) {
+  public MilvusSchema createMilvusSchema(String databaseName) {
     return new MilvusSchema(milvusHost, milvusPort, databaseName,
         milvusUsername, milvusPassword);
   }
@@ -234,71 +195,7 @@ public class SQLExecutor {
     return new QueryResult(columns, rows, 0);
   }
 
-  private QueryResult buildSessionVariableResult(String sql, String prefix) {
-    String normalized = sql.trim().replace("`", "");
-    String lower = normalized.toLowerCase();
-    int start = lower.indexOf(prefix);
-    String variable = start >= 0 ? normalized.substring(start + prefix.length()).trim() : normalized;
-    int end = variable.indexOf(',');
-    if (end >= 0) {
-      variable = variable.substring(0, end).trim();
-    }
-    end = variable.indexOf(' ');
-    if (end >= 0) {
-      variable = variable.substring(0, end).trim();
-    }
 
-    String value;
-    switch (variable.toLowerCase()) {
-      case "auto_increment_increment":
-        value = "1";
-        break;
-      case "max_allowed_packet":
-        value = "16777216";
-        break;
-      case "net_buffer_length":
-        value = "16384";
-        break;
-      case "sql_mode":
-        value = "STRICT_TRANS_TABLES";
-        break;
-      default:
-        value = "0";
-        break;
-    }
-
-    List<ColumnInfo> columns = new ArrayList<>();
-    columns.add(new ColumnInfo(variable, Types.VARCHAR, "VARCHAR"));
-    List<List<Object>> rows = new ArrayList<>();
-    rows.add(Arrays.asList(value));
-    return new QueryResult(columns, rows, 0);
-  }
-
-  private QueryResult buildShowDatabasesResult() {
-    List<ColumnInfo> columns = new ArrayList<>();
-    columns.add(new ColumnInfo("Database", Types.VARCHAR, "VARCHAR"));
-    List<List<Object>> rows = new ArrayList<>();
-
-    List<String> databases = listMilvusDatabases();
-    for (String dbName : databases) {
-      rows.add(Arrays.asList(dbName));
-    }
-
-    return new QueryResult(columns, rows, 0);
-  }
-
-  private QueryResult buildShowTablesResult(String currentDatabase) throws SQLException {
-    String dbName = currentDatabase != null && !currentDatabase.isEmpty()
-        ? currentDatabase : milvusDatabase;
-    List<ColumnInfo> columns = new ArrayList<>();
-    columns.add(new ColumnInfo("Tables_in_" + dbName, Types.VARCHAR, "VARCHAR"));
-    List<List<Object>> rows = new ArrayList<>();
-    MilvusSchema milvusSchema = createMilvusSchema(dbName);
-    for (String tableName : milvusSchema.getTableNames()) {
-      rows.add(Arrays.asList(tableName));
-    }
-    return new QueryResult(columns, rows, 0);
-  }
 
   public static class ColumnInfo {
     private final String name;
@@ -334,6 +231,9 @@ public class SQLExecutor {
       return label;
     }
 
+    public String getTableName() {
+      return tableName;
+    }
 
     public int getSqlType() {
       return sqlType;

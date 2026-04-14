@@ -16,8 +16,6 @@
  */
 package org.apache.calcite.adapter.milvus.sql.client.session;
 
-import io.netty.channel.Channel;
-
 /**
  * Connection session for MySQL client connections.
  * Stores per-connection state including authentication and current database.
@@ -25,14 +23,12 @@ import io.netty.channel.Channel;
 public class ConnectionSession {
 
   private final int connectionId;
-  private final Channel channel;
   private volatile String currentDatabase;
   private volatile boolean authenticated;
   private volatile int capabilityFlags;
 
-  public ConnectionSession(int connectionId, Channel channel, String defaultDatabase) {
+  public ConnectionSession(int connectionId, String defaultDatabase) {
     this.connectionId = connectionId;
-    this.channel = channel;
     this.currentDatabase = defaultDatabase;
     this.authenticated = false;
     this.capabilityFlags = 0;
@@ -40,10 +36,6 @@ public class ConnectionSession {
 
   public int getConnectionId() {
     return connectionId;
-  }
-
-  public Channel getChannel() {
-    return channel;
   }
 
   public String getCurrentDatabase() {

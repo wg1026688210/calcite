@@ -48,7 +48,7 @@ import java.util.Map;
 @ExtendWith(MilvusExtension.class)
 public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
 
-  private static final int MYSQL_PORT = 13308;
+  private static int mysqlPort;
   private static final String TEST_COLLECTION = "test_mysql_jdbc";
   private static MilvusMySQLServer server;
   private Connection jdbcConnection;
@@ -63,9 +63,9 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
     // Get Milvus connection params from extension
     Map<String, Object> params = MilvusExtension.getConnectionParams();
 
-    // Configure and start MySQL server
+    // Configure and start MySQL server with dynamic port
     MilvusServerConfig config = new MilvusServerConfig();
-    config.setPort(MYSQL_PORT);
+    config.setPort(0);
     config.setHost("127.0.0.1");
     config.setMilvusHost((String) params.get("host"));
     config.setMilvusPort((Integer) params.get("port"));
@@ -73,12 +73,13 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
 
     server = new MilvusMySQLServer(config);
     server.start();
+    mysqlPort = server.getPort();
 
     // Wait for server to start
     Thread.sleep(1000);
 
     // Create JDBC connection
-    String url = "jdbc:mysql://127.0.0.1:" + MYSQL_PORT + "/default?" +
+    String url = "jdbc:mysql://127.0.0.1:" + mysqlPort + "/default?" +
         "connectTimeout=10000&" +
         "socketTimeout=10000&" +
         "autoReconnect=false&" +

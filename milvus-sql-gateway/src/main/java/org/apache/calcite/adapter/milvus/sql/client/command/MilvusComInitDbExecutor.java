@@ -57,6 +57,6 @@ public class MilvusComInitDbExecutor implements CommandExecutor {
       session.setCurrentDatabase(database);
     }
 
-    return MySQLResponseBuilder.buildQueryResponse(SQLExecutor.QueryResult.EMPTY_RESULT);
+    return Collections.singletonList(MySQLResponseBuilder.buildOKPacket());
   }
 }

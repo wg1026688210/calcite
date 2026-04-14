@@ -94,12 +94,11 @@ public class MySQLProtocolUnitTest {
     assertEquals("MySQLEofPacket", packetTypes.get(3));
   }
 
-  @Test public void testUpdateResponse() {
-    // Create a non-QueryResult (update count)
-    SQLExecutor.QueryResult result = new SQLExecutor.QueryResult(new ArrayList<>(), new ArrayList<>(), 5);
-
-    // Build the response
-    Collection<DatabasePacket> packets = MySQLResponseBuilder.buildQueryResponse(result);
+  @Test public void testOKPacket() {
+    // DML/non-result-set operations should use buildOKPacket directly
+    // (buildQueryResponse no longer handles non-result-sets)
+    Collection<DatabasePacket> packets =
+        java.util.Collections.singletonList(MySQLResponseBuilder.buildOKPacket(5));
 
     // Verify packet structure
     assertEquals(1, packets.size(), "Should have 1 packet: OK");

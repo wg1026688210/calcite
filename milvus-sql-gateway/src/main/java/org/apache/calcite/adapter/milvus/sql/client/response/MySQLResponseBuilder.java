@@ -24,7 +24,6 @@ import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.My
 import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.MySQLFieldCountPacket;
 import org.apache.shardingsphere.database.protocol.mysql.packet.command.query.text.MySQLTextResultSetRowPacket;
 import org.apache.shardingsphere.database.protocol.mysql.packet.generic.MySQLEofPacket;
-import org.apache.shardingsphere.database.protocol.mysql.packet.generic.MySQLErrPacket;
 import org.apache.shardingsphere.database.protocol.mysql.packet.generic.MySQLOKPacket;
 import org.apache.shardingsphere.database.protocol.packet.DatabasePacket;
 
@@ -92,13 +91,6 @@ public final class MySQLResponseBuilder {
 
     List<DatabasePacket> packets = new ArrayList<>();
 
-    if (!result.isResultSet()) {
-      // Non-query result (UPDATE/INSERT/DELETE)
-      packets.add(new MySQLEofPacket(0,  calculateStatusFlags(true, false, false)));
-      System.err.println("[RESPONSE] Built non-query response, packets: " + packets.size());
-      return packets;
-    }
-
     // 1. Field count packet
     packets.add(new MySQLFieldCountPacket(result.getColumns().size()));
 
@@ -109,7 +101,7 @@ public final class MySQLResponseBuilder {
 
     // 3. After column definitions: always send EOF for maximum compatibility
     int statusFlags = calculateStatusFlags();
-    packets.add(new MySQLEofPacket(0, statusFlags));
+    addResultSetTerminator(packets, false, statusFlags);
 
     // 4. Row data packets - handle null values
     for (List<Object> row : result.getRows()) {
@@ -122,15 +114,16 @@ public final class MySQLResponseBuilder {
 
     // 5. Final: Always use EOF for maximum compatibility
     // MySQL CLI 8.0 may have issues with OK packet in result set
-    packets.add(new MySQLEofPacket(0,  calculateStatusFlags(true, false, false)));
-    System.err.println("[RESPONSE]   Columns: " + result.getColumns().size());
-    System.err.println("[RESPONSE]   Rows: " + result.getRows().size());
-    System.err.println("[RESPONSE]   Packets: " + packets.size());
-    for (int i = 0; i < packets.size(); i++) {
-      System.err.println("[RESPONSE]     [" + i + "] " + packets.get(i).getClass().getSimpleName());
-    }
+    addResultSetTerminator(packets, false, calculateStatusFlags(true, false, false));
 
     return packets;
+  }
+
+  /**
+   * Builds an OK packet for successful operations (no affected rows).
+   */
+  public static DatabasePacket buildOKPacket() {
+    return buildOKPacket(0);
   }
 
   /**
@@ -148,28 +141,31 @@ public final class MySQLResponseBuilder {
   }
 
   /**
+   * Adds a result set terminator packet (EOF or OK based on deprecateEof flag).
+   * Currently always uses EOF for maximum compatibility.
+   */
+  private static void addResultSetTerminator(List<DatabasePacket> packets, boolean deprecateEof, int statusFlags) {
+    if (deprecateEof) {
+      packets.add(new MySQLOKPacket(0, 0, statusFlags, 0, ""));
+    } else {
+      packets.add(new MySQLEofPacket(0, statusFlags));
+    }
+  }
+
+  /**
    * Builds an error packet for failed operations.
+   * Delegates to MilvusErrorPacketFactory for consistency.
    */
   public static DatabasePacket buildErrorPacket(String message, int errorCode, String sqlState) {
-    SQLException exception = new SQLException(message, sqlState, errorCode);
-    return new MySQLErrPacket(exception);
+    return MilvusErrorPacketFactory.newInstance(message, errorCode, sqlState);
   }
 
   /**
    * Builds an error packet from SQLException.
+   * Delegates to MilvusErrorPacketFactory for consistency.
    */
   public static DatabasePacket buildErrorPacket(SQLException e) {
-    String message = e.getMessage();
-    if (message == null) {
-      message = "Unknown error";
-    }
-    String sqlState = e.getSQLState();
-    if (sqlState == null) {
-      sqlState = "HY000";
-    }
-    int errorCode = e.getErrorCode() != 0 ? e.getErrorCode() : 1064;
-    SQLException wrapped = new SQLException(message, sqlState, errorCode);
-    return new MySQLErrPacket(wrapped);
+    return MilvusErrorPacketFactory.newInstance(e);
   }
 
   /**
@@ -181,14 +177,11 @@ public final class MySQLResponseBuilder {
 
   private static DatabasePacket createColumnDefinitionPacket(SQLExecutor.ColumnInfo column) {
     MySQLBinaryColumnType columnType = mapSqlTypeToMySQLType(column.getSqlType());
-    // Use empty strings for all optional fields to match native MySQL behavior
-    // - schema: native MySQL uses empty string (1 byte: 0x00) instead of "def" (4 bytes)
-    // - table/orgTable: empty string (1 byte each) instead of actual names
-    // - orgName: empty string (1 byte) instead of repeating column name
-    // This reduces packet size from ~59 bytes to ~37 bytes
+    // Use actual table name for JDBC metadata compatibility (ResultSetMetaData.getTableName)
+    // Empty orgName to avoid repeating column name
     String schemaName = "";
-    String tableName = "";
-    String orgTableName = "";
+    String tableName = column.getTableName();
+    String orgTableName = column.getTableName();
     String orgColumnName = "";
     String columnLabel = column.getLabel() == null || column.getLabel().isEmpty()
         ? column.getName() : column.getLabel();
@@ -296,7 +289,7 @@ public final class MySQLResponseBuilder {
         MySQLBinaryColumnType.VARCHAR, 0, false));
     int statusFlags = calculateStatusFlags();
     // Intermediate packet: always send EOF for maximum compatibility
-    packets.add(new MySQLEofPacket(0, statusFlags));
+    addResultSetTerminator(packets, false, statusFlags);
 
     // Add row with concatenated values if multiple variables
     StringBuilder value = new StringBuilder();
@@ -308,7 +301,7 @@ public final class MySQLResponseBuilder {
     row.add(value.toString());
     packets.add(new MySQLTextResultSetRowPacket(row));
 
-    packets.add(new MySQLEofPacket(0, statusFlags));
+    addResultSetTerminator(packets, false, statusFlags);
     return packets;
   }
 
@@ -331,7 +324,7 @@ public final class MySQLResponseBuilder {
             MySQLBinaryColumnType.VARCHAR, 0, false));
     int statusFlags = calculateStatusFlags();
     // Intermediate packet: always send EOF for maximum compatibility
-    packets.add(new MySQLEofPacket(0, statusFlags));
+    addResultSetTerminator(packets, false, statusFlags);
 
     // Add rows
     for (java.util.Map.Entry<String, String> entry : variables.entrySet()) {
@@ -342,7 +335,7 @@ public final class MySQLResponseBuilder {
     }
 
     // Final packet: always send EOF for maximum compatibility
-    packets.add(new MySQLEofPacket(0, statusFlags));
+    addResultSetTerminator(packets, false, statusFlags);
     return packets;
   }
 }

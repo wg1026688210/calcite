@@ -49,7 +49,7 @@ public class MilvusComQueryExecutor implements CommandExecutor {
     // Handle system variable queries (@@variable / SHOW VARIABLES) for MySQL 8.0+ JDBC compatibility
     // These cannot be pushed down to Calcite and must be mocked at the command layer.
     if (SystemVariableHandler.isSystemVariableQuery(trimmedSql)) {
-      return SystemVariableHandler.handle(trimmedSql);
+      return SystemVariableHandler.handle(trimmedSql, sqlExecutor, session);
     }
 
     // Handle USE database command (MySQL JDBC sends it as COM_QUERY)
@@ -65,7 +65,7 @@ public class MilvusComQueryExecutor implements CommandExecutor {
       if (session != null) {
         session.setCurrentDatabase(dbName);
       }
-      return MySQLResponseBuilder.buildQueryResponse(SQLExecutor.QueryResult.EMPTY_RESULT);
+      return Collections.singletonList(MySQLResponseBuilder.buildOKPacket());
     }
 
     // Use session's current database for execution
