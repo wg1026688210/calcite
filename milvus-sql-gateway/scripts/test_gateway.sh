@@ -67,22 +67,22 @@ else
 fi
 
 # ==========================================
-# Step 3: Deployment Verification (Fat JAR)
+# Step 3: Deployment Verification (distZip)
 # ==========================================
-print_header "Step 3: Deployment Verification (Fat JAR)"
+print_header "Step 3: Deployment Verification (distZip)"
 
-if ./gradlew ":${MODULE}:fatJar" -x test --quiet > /tmp/fatjar.log 2>&1; then
-    JAR_PATH=$(find "${PROJECT_ROOT}/${MODULE}/build/libs" -name "*-all.jar" | head -1)
-    if [ -n "$JAR_PATH" ]; then
-        print_pass "Fat JAR built successfully: $(basename "$JAR_PATH")"
-        ls -lh "$JAR_PATH"
+if ./gradlew ":${MODULE}:distZip" -x test --quiet > /tmp/distzip.log 2>&1; then
+    ZIP_PATH=$(find "${PROJECT_ROOT}/${MODULE}/build/distributions" -name "*.zip" | head -1)
+    if [ -n "$ZIP_PATH" ]; then
+        print_pass "Distribution ZIP built successfully: $(basename "$ZIP_PATH")"
+        ls -lh "$ZIP_PATH"
     else
-        print_fail "Fat JAR build succeeded but JAR file not found"
+        print_fail "Distribution ZIP build succeeded but ZIP file not found"
         exit 1
     fi
 else
-    print_fail "Fat JAR build failed"
-    cat /tmp/fatjar.log
+    print_fail "Distribution ZIP build failed"
+    cat /tmp/distzip.log
     exit 1
 fi
 
@@ -96,15 +96,20 @@ rm -rf "$DEPLOY_DIR"
 mkdir -p "$DEPLOY_DIR"
 cd "$DEPLOY_DIR"
 
-if unzip -q -o "$JAR_PATH" 2>/dev/null || true; then
-    print_pass "Fat JAR extracted to $DEPLOY_DIR"
+if unzip -q -o "$ZIP_PATH" 2>/dev/null; then
+    print_pass "Distribution ZIP extracted to $DEPLOY_DIR"
 else
-    print_fail "Failed to extract Fat JAR"
+    print_fail "Failed to extract Distribution ZIP"
     exit 1
 fi
 
-# Start server in background
-java -cp . org.apache.calcite.adapter.milvus.sql.client.MilvusMySQLServerBootstrap > /tmp/milvus-server-test.log 2>&1 &
+# Enter the versioned subdirectory created by distZip
+EXTRACTED_DIR=$(find "$DEPLOY_DIR" -maxdepth 1 -type d | tail -1)
+cd "$EXTRACTED_DIR"
+print_info "Working directory: $(pwd)"
+
+# Start server in background using the distribution start script
+bash bin/start.sh > /tmp/milvus-server-test.log 2>&1 &
 SERVER_PID=$!
 echo "$SERVER_PID" > /tmp/milvus-server-test.pid
 print_info "Server started with PID $SERVER_PID"

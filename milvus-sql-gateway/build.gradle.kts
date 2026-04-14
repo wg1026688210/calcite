@@ -91,39 +91,3 @@ distributions {
     }
 }
 
-// Fat JAR configuration
-tasks.register<Jar>("fatJar") {
-    archiveClassifier.set("all")
-    // Collect all service files manually
-    val serviceFiles = mutableMapOf<String, MutableSet<String>>()
-    configurations.runtimeClasspath.get().forEach { jar ->
-        if (jar.isFile && jar.name.endsWith(".jar")) {
-            zipTree(jar).matching { include("META-INF/services/*") }.forEach { file ->
-                val serviceName = file.name
-                val implementations = file.readLines()
-                    .filter { it.isNotBlank() && !it.startsWith("#") }
-                    .toSet()
-                serviceFiles.getOrPut(serviceName) { mutableSetOf() }.addAll(implementations)
-            }
-        }
-    }
-
-    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) }) {
-        exclude("META-INF/services/*")
-    }
-    with(tasks.jar.get())
-
-    // Add merged service files
-    serviceFiles.forEach { (name, implementations) ->
-        val content = implementations.joinToString("\n")
-        val serviceFile = File(temporaryDir, "META-INF/services/$name")
-        serviceFile.parentFile.mkdirs()
-        serviceFile.writeText(content)
-    }
-    from(temporaryDir)
-
-    manifest {
-        attributes["Main-Class"] = "org.apache.calcite.adapter.milvus.sql.client.MilvusMySQLServerBootstrap"
-    }
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
