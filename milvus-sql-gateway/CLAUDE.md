@@ -289,3 +289,6 @@ public class MilvusMySQLJdbcE2ETest extends MilvusBaseE2ETest {
 # 4. 手动测试
 ../gradlew :milvus-sql-client:run &
 mysql -h 127.0.0.1 -P 3307 -e "SELECT * FROM milvus.test_collection"
+
+# 5. 生产打包
+./gradlew :milvus-sql-gateway:distZip
